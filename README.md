@@ -1,5 +1,4 @@
 # JournalJoe
-Here is the **README.md formatted version** you can paste directly into your repository:
 
 ---
 
@@ -91,4 +90,3 @@ Only the repo owner merges PRs into `main`.
 
 ---
 
-Feel free to ask if you want a **CONTRIBUTING.md**, **CODEOWNERS file**, or a **Workflow Diagram** to add to your repo!
