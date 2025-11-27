@@ -66,17 +66,7 @@ If your branch has conflicts with `main`:
 
 ---
 
-## 🔹 5. **Pull Request Flow**
 
-The correct workflow is:
-
-```
-Create Branch → Commit → Push → Pull Request → Review → Approval → Merge → Delete Branch
-```
-
-Only the repo owner merges PRs into `main`.
-
----
 
 ## Summary
 
