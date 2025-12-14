@@ -8,6 +8,8 @@ import Journal from './Journal';
 import Insights from './Insights';
 import Sessions from './Sessions';
 import Profile from './Profile';
+import ChatWithJoe from "./ChatWithJoe";
+
 import { RootStackParamList } from '../../../App';
 
 type ViewName = 'journal' | 'chat' | 'insights' | 'sessions' | 'profile';
@@ -24,11 +26,9 @@ export default function PatientRoot() {
     const renderView = () => {
         switch (activeView) {
             case 'journal': return <Journal />;
-            case 'chat': return (
-                <View style={styles.placeholder}>
-                    <Text style={styles.placeholderText}>Chat with Joe (coming soon)</Text>
-                </View>
-            );
+            case 'chat':
+                return <ChatWithJoe />;
+
             case 'insights': return <Insights />;
             case 'sessions': return <Sessions />;
             case 'profile': return <Profile />;
