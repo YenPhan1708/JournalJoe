@@ -1,57 +1,176 @@
 import React from "react";
-import { View, Text, StyleSheet, FlatList, ScrollView } from "react-native";
+import {
+    View,
+    Text,
+    StyleSheet,
+    FlatList,
+    TouchableOpacity,
+} from "react-native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useNavigation } from "@react-navigation/native";
+import { Ionicons } from "@expo/vector-icons";
+
+// 👉 Update this type if your stack param list is elsewhere
+type RootStackParamList = {
+    Login: undefined;
+};
+
+type NavigationProp = NativeStackNavigationProp<RootStackParamList, "Login">;
 
 const mockNotes = [
-    { id: "1", date: "2025-05-10", text: "Today I felt calmer after the walk." },
-    { id: "2", date: "2025-05-09", text: "Had a stressful meeting but coped." },
-    { id: "3", date: "2025-05-08", text: "Tried breathing exercises — helped a bit." },
+    {
+        id: "1",
+        date: "Dec 9",
+        time: "8:30 AM",
+        text:
+            "Today I woke up feeling anxious about the presentation at work. My chest felt tight and I couldn't focus...",
+    },
+    {
+        id: "2",
+        date: "Dec 8",
+        time: "8:15 PM",
+        text:
+            "Had a good day overall. Managed to complete my tasks without procrastinating too much...",
+    },
+    {
+        id: "3",
+        date: "Dec 7",
+        time: "10:00 AM",
+        text:
+            "Feeling a bit low today. Not sure why. Everything feels harder than it should be...",
+    },
 ];
 
 export default function Journal() {
+    const navigation = useNavigation<NavigationProp>();
+
     return (
-        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-            <View style={styles.container}>
-                <Text style={styles.title}>Journal</Text>
+        <View style={styles.screen}>
 
-                <FlatList
-                    data={mockNotes}
-                    keyExtractor={(i) => i.id}
-                    renderItem={({ item }) => (
-                        <View style={styles.card}>
-                            <Text style={styles.cardDate}>{item.date}</Text>
-                            <Text style={styles.cardText}>{item.text}</Text>
-                        </View>
-                    )}
-                    ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-                    scrollEnabled={false} // FlatList inside ScrollView — disable its own scroll
-                />
-
-                <View style={styles.addHint}>
-                    <Text style={styles.addHintText}>Tap the "+" (not implemented) to add a new entry.</Text>
-                </View>
+            {/* Title */}
+            <View style={styles.titleSection}>
+                <Text style={styles.title}>
+                    My Journal <Text style={styles.sparkle}>✨</Text>
+                </Text>
+                <Text style={styles.subtitle}>
+                    Write freely, Joe is here to support you. You choose what to share with
+                    your therapist.
+                </Text>
             </View>
-        </ScrollView>
+
+            {/* New Entry Button */}
+            <TouchableOpacity style={styles.newEntryButton}>
+                <Text style={styles.newEntryText}>＋ New Journal Entry</Text>
+            </TouchableOpacity>
+
+            {/* Journal Entries */}
+            <FlatList
+                data={mockNotes}
+                keyExtractor={(item) => item.id}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 24 }}
+                renderItem={({ item }) => (
+                    <View style={styles.card}>
+                        <Text style={styles.cardDate}>
+                            {item.date}{" "}
+                            <Text style={styles.cardTime}>{item.time}</Text>
+                        </Text>
+                        <Text style={styles.cardText} numberOfLines={3}>
+                            {item.text}
+                        </Text>
+                    </View>
+                )}
+            />
+        </View>
     );
 }
 
 const styles = StyleSheet.create({
-    scroll: { padding: 16, backgroundColor: "#F9FAFB" },
-    container: { flex: 1 },
-    title: { fontSize: 20, fontWeight: "600", marginBottom: 12 },
+    screen: {
+        flex: 1,
+        backgroundColor: "#F9FAFB",
+        paddingHorizontal: 16,
+        paddingTop: 16,
+    },
+
+    header: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 20,
+    },
+
+    greeting: {
+        fontSize: 18,
+        fontWeight: "600",
+        color: "#111827",
+    },
+
+    subGreeting: {
+        fontSize: 13,
+        color: "#6B7280",
+        marginTop: 2,
+    },
+
+    titleSection: {
+        marginBottom: 16,
+    },
+
+    title: {
+        fontSize: 22,
+        fontWeight: "700",
+        color: "#111827",
+    },
+
+    sparkle: {
+        color: "#8B5CF6",
+    },
+
+    subtitle: {
+        fontSize: 14,
+        color: "#6B7280",
+        marginTop: 6,
+        lineHeight: 20,
+    },
+
+    newEntryButton: {
+        backgroundColor: "#7C3AED",
+        paddingVertical: 14,
+        borderRadius: 14,
+        alignItems: "center",
+        marginBottom: 20,
+    },
+
+    newEntryText: {
+        color: "white",
+        fontSize: 15,
+        fontWeight: "600",
+    },
+
     card: {
         backgroundColor: "white",
-        padding: 14,
-        borderRadius: 12,
-        marginBottom: 4,
+        padding: 16,
+        borderRadius: 14,
+        marginBottom: 12,
         borderWidth: 1,
-        borderColor: "#F3F4F6",
-        shadowColor: "#000",
-        shadowOpacity: 0.03,
-        shadowRadius: 6,
-        elevation: 1,
+        borderColor: "#E5E7EB",
     },
-    cardDate: { color: "#6B7280", fontSize: 12, marginBottom: 6 },
-    cardText: { color: "#111827", fontSize: 15, lineHeight: 20 },
-    addHint: { marginTop: 12, padding: 12, borderRadius: 10, backgroundColor: "#EFF6FF" },
-    addHintText: { color: "#374151", fontSize: 13 },
+
+    cardDate: {
+        fontSize: 13,
+        fontWeight: "600",
+        color: "#111827",
+        marginBottom: 6,
+    },
+
+    cardTime: {
+        fontWeight: "400",
+        color: "#6B7280",
+    },
+
+    cardText: {
+        fontSize: 14,
+        color: "#374151",
+        lineHeight: 20,
+    },
 });

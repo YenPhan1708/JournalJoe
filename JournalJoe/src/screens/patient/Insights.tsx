@@ -1,43 +1,239 @@
-import React from "react";
-import { View, Text, StyleSheet, ScrollView } from "react-native";
+import React, { useRef } from "react";
+import {
+    ScrollView,
+    View,
+    Text,
+    StyleSheet,
+    Pressable,
+    Animated,
+} from "react-native";
+import Ionicons from "react-native-vector-icons/Ionicons";
+import CoachCard from "../../components/CoachCard";
+import StatCard from "../../components/StatCard";
+import MoodChart from "../../components/MoodChart";
+import { COLORS } from "../../theme/colors";
+
+interface JournalEntry {
+    id: string;
+    date: string;
+    moodScore: number;
+    tags: string[];
+    shared?: boolean;
+}
+
+/* ---------------- Animated Tag ---------------- */
+
+interface AnimatedTagProps {
+    label: string;
+}
+
+const AnimatedTag: React.FC<AnimatedTagProps> = ({ label }) => {
+    const scale = useRef(new Animated.Value(1)).current;
+    const opacity = useRef(new Animated.Value(1)).current;
+
+    const pressIn = () => {
+        Animated.parallel([
+            Animated.timing(scale, {
+                toValue: 0.95,
+                duration: 120,
+                useNativeDriver: true,
+            }),
+            Animated.timing(opacity, {
+                toValue: 0.85,
+                duration: 120,
+                useNativeDriver: true,
+            }),
+        ]).start();
+    };
+
+    const pressOut = () => {
+        Animated.parallel([
+            Animated.timing(scale, {
+                toValue: 1,
+                duration: 120,
+                useNativeDriver: true,
+            }),
+            Animated.timing(opacity, {
+                toValue: 1,
+                duration: 120,
+                useNativeDriver: true,
+            }),
+        ]).start();
+    };
+
+    return (
+        <Pressable onPressIn={pressIn} onPressOut={pressOut}>
+            <Animated.View
+                style={[
+                    styles.tag,
+                    {
+                        transform: [{ scale }],
+                        opacity,
+                    },
+                ]}
+            >
+                <Text style={styles.tagText}>{label}</Text>
+            </Animated.View>
+        </Pressable>
+    );
+};
+
+/* ---------------- Main Screen ---------------- */
 
 export default function Insights() {
+    const journals: JournalEntry[] = [
+        { id: "1", date: "2025-12-01", moodScore: 2, tags: ["anxiety"], shared: true },
+        { id: "2", date: "2025-12-03", moodScore: 3, tags: ["stress"] },
+        { id: "3", date: "2025-12-05", moodScore: 4, tags: ["coping"] },
+        { id: "4", date: "2025-12-07", moodScore: 3, tags: ["anxiety", "work"] },
+    ];
+
+    // 📈 Chart data
+    const moodData = journals.map(j => ({
+        label: new Date(j.date).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+        }),
+        entries: j.moodScore,
+    }));
+
+    // 🧠 Tag aggregation
+    const processedTags = journals.flatMap(j => j.tags);
+    const tagCount = processedTags.reduce<Record<string, number>>((acc, tag) => {
+        acc[tag] = (acc[tag] || 0) + 1;
+        return acc;
+    }, {});
+
     return (
-        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-            <View style={styles.container}>
-                <Text style={styles.title}>Insights</Text>
+        <ScrollView
+            style={{ backgroundColor: COLORS.bg }}
+            contentContainerStyle={styles.container}
+            showsVerticalScrollIndicator={false}
+        >
+            <Text style={styles.header}>Your Insights 📊</Text>
+            <Text style={styles.subHeader}>
+                Here’s what I’ve noticed about your journey
+            </Text>
 
-                <View style={styles.card}>
-                    <Text style={styles.cardTitle}>Weekly Mood</Text>
-                    <Text style={styles.cardText}>Mostly stable — continue using coping skills and short walks.</Text>
+            <CoachCard />
+
+            <View style={styles.stats}>
+                <StatCard icon="journal-outline" value={journals.length} label="Total Entries" />
+                <StatCard icon="calendar-outline" value="4" label="Last 7 Days" />
+                <StatCard
+                    icon="share-social-outline"
+                    value={journals.filter(j => j.shared).length}
+                    label="Shared"
+                />
+            </View>
+
+            {/* 📈 Mood Chart */}
+            <MoodChart data={moodData} />
+
+            {/* 🧠 Tags */}
+            <View style={styles.card}>
+                <Text style={styles.cardTitle}>What you’ve been processing 🧠</Text>
+                <View style={styles.tagsWrap}>
+                    {Object.entries(tagCount).map(([tag, count]) => (
+                        <AnimatedTag
+                            key={tag}
+                            label={`${tag} ×${count}`}
+                        />
+                    ))}
+                </View>
+            </View>
+
+            {/* 💜 Joe’s Tips */}
+            <View style={styles.card}>
+                <Text style={styles.cardTitle}>Joe’s Tips for You 💜</Text>
+
+                <View style={styles.tipBox}>
+                    <Ionicons name="heart-outline" size={18} color={COLORS.primary} />
+                    <Text style={styles.tipTitle}>For Anxiety Moments</Text>
+                    {[
+                        "Ground yourself using 5-4-3-2-1",
+                        "Slow breathing for 5 minutes",
+                        "Name what you’re feeling",
+                        "Check in with your body",
+                    ].map(tip => (
+                        <Text key={tip} style={styles.tipText}>• {tip}</Text>
+                    ))}
                 </View>
 
-                <View style={styles.card}>
-                    <Text style={styles.cardTitle}>Sleep Pattern</Text>
-                    <Text style={styles.cardText}>Slightly irregular; aim for consistent sleep schedule (±30 minutes).</Text>
+                <View style={styles.tipBox}>
+                    <Ionicons name="fitness-outline" size={18} color={COLORS.primary} />
+                    <Text style={styles.tipTitle}>For Stress Management</Text>
+                    {[
+                        "Break tasks into steps",
+                        "Take short screen breaks",
+                        "Avoid multitasking",
+                        "Notice early stress signs",
+                    ].map(tip => (
+                        <Text key={tip} style={styles.tipText}>• {tip}</Text>
+                    ))}
                 </View>
 
-                <View style={styles.card}>
-                    <Text style={styles.cardTitle}>Activity</Text>
-                    <Text style={styles.cardText}>3 short walks this week — good progress. Try a gentle home stretch routine.</Text>
+                <View style={styles.reminderBox}>
+                    <Text style={styles.reminderText}>
+                        Remember: These are friendly suggestions from Joe, not medical advice.
+                        Your therapist is the expert 💙
+                    </Text>
                 </View>
             </View>
         </ScrollView>
     );
 }
 
+/* ---------------- Styles ---------------- */
+
 const styles = StyleSheet.create({
-    scroll: { padding: 16, backgroundColor: "#F9FAFB" },
-    container: { flex: 1 },
-    title: { fontSize: 20, fontWeight: "600", marginBottom: 12 },
+    container: { padding: 16 },
+    header: { fontSize: 22, fontWeight: "700" },
+    subHeader: { color: COLORS.textMuted, marginBottom: 16 },
+    stats: { flexDirection: "row", gap: 8, marginBottom: 16 },
+
     card: {
-        backgroundColor: "white",
-        padding: 14,
-        borderRadius: 12,
-        marginBottom: 10,
+        backgroundColor: COLORS.card,
+        borderRadius: 16,
+        padding: 16,
         borderWidth: 1,
-        borderColor: "#F3F4F6",
+        borderColor: COLORS.border,
+        marginBottom: 16,
     },
-    cardTitle: { fontWeight: "700", marginBottom: 6 },
-    cardText: { color: "#374151", lineHeight: 20 },
+    cardTitle: { fontWeight: "700", marginBottom: 10 },
+
+    tagsWrap: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        gap: 8,
+    },
+    tag: {
+        backgroundColor: COLORS.primarySoft,
+        borderRadius: 20,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+    },
+    tagText: {
+        fontSize: 12,
+        fontWeight: "500",
+        color: COLORS.primary,
+    },
+
+    tipBox: {
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        padding: 12,
+        marginBottom: 12,
+    },
+    tipTitle: { fontWeight: "600", marginVertical: 6 },
+    tipText: { fontSize: 13, marginLeft: 4 },
+
+    reminderBox: {
+        marginTop: 12,
+        padding: 12,
+        backgroundColor: COLORS.primarySoft,
+        borderRadius: 12,
+    },
+    reminderText: { fontSize: 12, color: COLORS.primary },
 });
