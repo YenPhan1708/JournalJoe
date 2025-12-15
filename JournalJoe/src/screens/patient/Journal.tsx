@@ -1,53 +1,105 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
     View,
     Text,
     StyleSheet,
     FlatList,
     TouchableOpacity,
+    TextInput,
+    Modal,
+    Switch,
 } from "react-native";
-import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useNavigation } from "@react-navigation/native";
-import { Ionicons } from "@expo/vector-icons";
+import { auth, db } from "../../services/firebase";
+import {
+    collection,
+    addDoc,
+    getDocs,
+    query,
+    orderBy,
+    serverTimestamp,
+    where,
+} from "firebase/firestore";
 
-// 👉 Update this type if your stack param list is elsewhere
-type RootStackParamList = {
-    Login: undefined;
-};
-
-type NavigationProp = NativeStackNavigationProp<RootStackParamList, "Login">;
-
-const mockNotes = [
-    {
-        id: "1",
-        date: "Dec 9",
-        time: "8:30 AM",
-        text:
-            "Today I woke up feeling anxious about the presentation at work. My chest felt tight and I couldn't focus...",
-    },
-    {
-        id: "2",
-        date: "Dec 8",
-        time: "8:15 PM",
-        text:
-            "Had a good day overall. Managed to complete my tasks without procrastinating too much...",
-    },
-    {
-        id: "3",
-        date: "Dec 7",
-        time: "10:00 AM",
-        text:
-            "Feeling a bit low today. Not sure why. Everything feels harder than it should be...",
-    },
-];
+interface JournalEntry {
+    id: string;
+    text: string;
+    createdAt: any;
+    moodScore: number;
+    shared: boolean;
+    tags: string;
+    userId: string;
+}
 
 export default function Journal() {
-    const navigation = useNavigation<NavigationProp>();
+    const [entries, setEntries] = useState<JournalEntry[]>([]);
+    const [modalVisible, setModalVisible] = useState(false);
+    const [newText, setNewText] = useState("");
+    const [moodScore, setMoodScore] = useState(3);
+    const [shared, setShared] = useState(false);
+    const [tags, setTags] = useState("");
+    const [loading, setLoading] = useState(false);
+
+    const user = auth.currentUser;
+    const uid = user?.uid;
+
+    const fetchEntries = async () => {
+        if (!uid) return;
+
+        setLoading(true);
+        try {
+            const q = query(
+                collection(db, "journals"),
+                where("userId", "==", uid),
+                orderBy("createdAt", "desc")
+            );
+
+            const snap = await getDocs(q);
+            const data = snap.docs.map((doc) => ({
+                id: doc.id,
+                ...doc.data(),
+            })) as JournalEntry[];
+
+            setEntries(data);
+        } catch (err) {
+            console.log("Error fetching journal entries:", err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleAddEntry = async () => {
+        if (!uid || !newText.trim()) return;
+
+        try {
+            await addDoc(collection(db, "journals"), {
+                text: newText.trim(),
+                createdAt: serverTimestamp(),
+                moodScore,
+                shared,
+                tags: tags.trim(),
+                userId: uid,
+            });
+
+            setNewText("");
+            setMoodScore(3);
+            setShared(false);
+            setTags("");
+            setModalVisible(false);
+
+            fetchEntries();
+        } catch (err) {
+            console.log("Error adding journal entry:", err);
+        }
+    };
+
+    useEffect(() => {
+        if (uid) {
+            fetchEntries();
+        }
+    }, [uid]);
 
     return (
         <View style={styles.screen}>
-
-            {/* Title */}
             <View style={styles.titleSection}>
                 <Text style={styles.title}>
                     My Journal <Text style={styles.sparkle}>✨</Text>
@@ -58,29 +110,122 @@ export default function Journal() {
                 </Text>
             </View>
 
-            {/* New Entry Button */}
-            <TouchableOpacity style={styles.newEntryButton}>
+            <TouchableOpacity
+                style={styles.newEntryButton}
+                onPress={() => setModalVisible(true)}
+            >
                 <Text style={styles.newEntryText}>＋ New Journal Entry</Text>
             </TouchableOpacity>
 
-            {/* Journal Entries */}
             <FlatList
-                data={mockNotes}
+                data={entries}
                 keyExtractor={(item) => item.id}
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={{ paddingBottom: 24 }}
+                refreshing={loading}
+                onRefresh={fetchEntries}
                 renderItem={({ item }) => (
                     <View style={styles.card}>
                         <Text style={styles.cardDate}>
-                            {item.date}{" "}
-                            <Text style={styles.cardTime}>{item.time}</Text>
+                            {item.createdAt?.toDate
+                                ? item.createdAt.toDate().toLocaleDateString("en-US", {
+                                    month: "short",
+                                    day: "numeric",
+                                })
+                                : "Just now"}{" "}
+                            <Text style={styles.cardMood}>Mood: {item.moodScore}</Text>
                         </Text>
+
+                        <Text style={styles.cardTags}>Tags: {item.tags}</Text>
+
                         <Text style={styles.cardText} numberOfLines={3}>
                             {item.text}
+                        </Text>
+
+                        <Text style={styles.cardShared}>
+                            Shared: {item.shared ? "Yes" : "No"}
                         </Text>
                     </View>
                 )}
             />
+
+            <Modal visible={modalVisible} animationType="slide" transparent>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalTitle}>New Journal Entry</Text>
+
+                        <TextInput
+                            style={styles.modalInput}
+                            placeholder="Write your thoughts here..."
+                            multiline
+                            value={newText}
+                            onChangeText={setNewText}
+                        />
+
+                        <TextInput
+                            style={styles.modalInput}
+                            placeholder="Tags (AI can overwrite later)"
+                            value={tags}
+                            onChangeText={setTags}
+                        />
+
+                        <View style={styles.moodContainer}>
+                            <Text>Mood Score (1-5): {moodScore}</Text>
+                            <View style={styles.moodButtons}>
+                                {[1, 2, 3, 4, 5].map((num) => (
+                                    <TouchableOpacity
+                                        key={num}
+                                        style={[
+                                            styles.moodButton,
+                                            moodScore === num && {
+                                                backgroundColor: "#7C3AED",
+                                            },
+                                        ]}
+                                        onPress={() => setMoodScore(num)}
+                                    >
+                                        <Text
+                                            style={[
+                                                styles.moodButtonText,
+                                                moodScore === num && { color: "white" },
+                                            ]}
+                                        >
+                                            {num}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        </View>
+
+                        <View style={styles.sharedContainer}>
+                            <Text>Share with therapist:</Text>
+                            <Switch value={shared} onValueChange={setShared} />
+                        </View>
+
+                        <View style={styles.modalButtons}>
+                            <TouchableOpacity
+                                style={[styles.modalButton, { backgroundColor: "#7C3AED" }]}
+                                onPress={handleAddEntry}
+                            >
+                                <Text style={styles.modalButtonText}>Save</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={[styles.modalButton, { backgroundColor: "#E5E7EB" }]}
+                                onPress={() => setModalVisible(false)}
+                            >
+                                <Text
+                                    style={[
+                                        styles.modalButtonText,
+                                        { color: "#111827" },
+                                    ]}
+                                >
+                                    Cancel
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -91,25 +236,6 @@ const styles = StyleSheet.create({
         backgroundColor: "#F9FAFB",
         paddingHorizontal: 16,
         paddingTop: 16,
-    },
-
-    header: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: 20,
-    },
-
-    greeting: {
-        fontSize: 18,
-        fontWeight: "600",
-        color: "#111827",
-    },
-
-    subGreeting: {
-        fontSize: 13,
-        color: "#6B7280",
-        marginTop: 2,
     },
 
     titleSection: {
@@ -163,8 +289,15 @@ const styles = StyleSheet.create({
         marginBottom: 6,
     },
 
-    cardTime: {
+    cardMood: {
         fontWeight: "400",
+        color: "#6B7280",
+    },
+
+    cardTags: {
+        fontSize: 12,
+        fontStyle: "italic",
+        marginBottom: 6,
         color: "#6B7280",
     },
 
@@ -172,5 +305,89 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: "#374151",
         lineHeight: 20,
+        marginBottom: 6,
+    },
+
+    cardShared: {
+        fontSize: 12,
+        color: "#6B7280",
+    },
+
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.5)",
+        justifyContent: "center",
+        alignItems: "center",
+    },
+
+    modalContent: {
+        backgroundColor: "white",
+        padding: 20,
+        borderRadius: 20,
+        width: "90%",
+    },
+
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: "700",
+        marginBottom: 12,
+    },
+
+    modalInput: {
+        borderWidth: 1,
+        borderColor: "#E5E7EB",
+        borderRadius: 12,
+        padding: 12,
+        minHeight: 50,
+        textAlignVertical: "top",
+        marginBottom: 12,
+    },
+
+    moodContainer: {
+        marginBottom: 12,
+    },
+
+    moodButtons: {
+        flexDirection: "row",
+        marginTop: 6,
+    },
+
+    moodButton: {
+        padding: 8,
+        marginRight: 6,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: "#E5E7EB",
+    },
+
+    moodButtonText: {
+        fontWeight: "600",
+        color: "#111827",
+    },
+
+    sharedContainer: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginBottom: 16,
+    },
+
+    modalButtons: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+    },
+
+    modalButton: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 12,
+        alignItems: "center",
+        marginHorizontal: 4,
+    },
+
+    modalButtonText: {
+        fontWeight: "600",
+        fontSize: 15,
+        color: "white",
     },
 });

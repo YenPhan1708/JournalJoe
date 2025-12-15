@@ -45,7 +45,7 @@ export default function TherapistRoot() {
             {/* HEADER */}
             <View style={styles.header}>
                 <View>
-                    <Text style={styles.headerTitle}>Journal Joe Pro</Text>
+                    <Text style={styles.headerTitle}>Journal Joe </Text>
                     <Text style={styles.headerSub}>Dr. Sarah Mitchell</Text>
                 </View>
 
