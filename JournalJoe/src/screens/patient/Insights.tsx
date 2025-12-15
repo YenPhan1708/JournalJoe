@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import {
     ScrollView,
     View,
@@ -8,6 +8,8 @@ import {
     Animated,
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
+import { collection, getDocs, query, orderBy } from "firebase/firestore";
+import { db } from "../../services/firebase";
 import CoachCard from "../../components/CoachCard";
 import StatCard from "../../components/StatCard";
 import MoodChart from "../../components/MoodChart";
@@ -81,14 +83,37 @@ const AnimatedTag: React.FC<AnimatedTagProps> = ({ label }) => {
 /* ---------------- Main Screen ---------------- */
 
 export default function Insights() {
-    const journals: JournalEntry[] = [
-        { id: "1", date: "2025-12-01", moodScore: 2, tags: ["anxiety"], shared: true },
-        { id: "2", date: "2025-12-03", moodScore: 3, tags: ["stress"] },
-        { id: "3", date: "2025-12-05", moodScore: 4, tags: ["coping"] },
-        { id: "4", date: "2025-12-07", moodScore: 3, tags: ["anxiety", "work"] },
-    ];
+    const [journals, setJournals] = useState<JournalEntry[]>([]);
+    const [loading, setLoading] = useState(true);
 
-    // 📈 Chart data
+    useEffect(() => {
+        const fetchJournals = async () => {
+            try {
+                const q = query(collection(db, "journals"), orderBy("createdAt", "desc"));
+                const snapshot = await getDocs(q);
+                const fetchedJournals: JournalEntry[] = snapshot.docs.map(doc => {
+                    const data = doc.data();
+                    return {
+                        id: doc.id,
+                        date: data.createdAt?.toDate().toISOString().split("T")[0] || "",
+                        moodScore: data.moodScore,
+                        tags: Array.isArray(data.tags) ? data.tags : [data.tags],
+                        shared: data.shared || false,
+                    };
+                });
+                setJournals(fetchedJournals);
+            } catch (err) {
+                console.error("Error fetching journals:", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchJournals();
+    }, []);
+
+    if (loading) return <Text style={{ padding: 16 }}>Loading...</Text>;
+
     const moodData = journals.map(j => ({
         label: new Date(j.date).toLocaleDateString("en-US", {
             month: "short",
@@ -97,7 +122,6 @@ export default function Insights() {
         entries: j.moodScore,
     }));
 
-    // 🧠 Tag aggregation
     const processedTags = journals.flatMap(j => j.tags);
     const tagCount = processedTags.reduce<Record<string, number>>((acc, tag) => {
         acc[tag] = (acc[tag] || 0) + 1;
@@ -119,7 +143,7 @@ export default function Insights() {
 
             <View style={styles.stats}>
                 <StatCard icon="journal-outline" value={journals.length} label="Total Entries" />
-                <StatCard icon="calendar-outline" value="4" label="Last 7 Days" />
+                <StatCard icon="calendar-outline" value="7" label="Last 7 Days" />
                 <StatCard
                     icon="share-social-outline"
                     value={journals.filter(j => j.shared).length}
@@ -135,10 +159,7 @@ export default function Insights() {
                 <Text style={styles.cardTitle}>What you’ve been processing 🧠</Text>
                 <View style={styles.tagsWrap}>
                     {Object.entries(tagCount).map(([tag, count]) => (
-                        <AnimatedTag
-                            key={tag}
-                            label={`${tag} ×${count}`}
-                        />
+                        <AnimatedTag key={tag} label={`${tag} ×${count}`} />
                     ))}
                 </View>
             </View>
