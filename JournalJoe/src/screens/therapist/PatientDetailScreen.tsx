@@ -73,7 +73,6 @@ export default function PatientDetailScreen() {
             <View style={styles.summaryRow}>
                 <View style={styles.tile}>
                     <Text style={styles.tileValue}>—</Text>
-                    <Text style={styles.tileLabel}>Mood Trend</Text>
                 </View>
                 <View style={styles.tile}>
                     <Text style={styles.tileValue}>{patient.journalEntries.length}</Text>
@@ -108,7 +107,6 @@ export default function PatientDetailScreen() {
             </View>
 
             {/* Mood Trend Chart */}
-            <Text style={styles.sectionHeader}>Mood Trend</Text>
             <MoodChart data={patient.moodScore} />
 
             {/* Recurring Themes */}
