@@ -1,7 +1,17 @@
 import React, { useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import {
+    View,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    StyleSheet,
+} from "react-native";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 import { HeartHandshake } from "lucide-react-native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+
+import { auth, db } from "../services/firebase";
 import { RootStackParamList } from "../../App";
 
 type LoginScreenNavProp = NativeStackNavigationProp<
@@ -9,30 +19,58 @@ type LoginScreenNavProp = NativeStackNavigationProp<
     "Login"
 >;
 
-export default function LoginScreen({
-                                        navigation,
-                                    }: {
+interface Props {
     navigation: LoginScreenNavProp;
-}) {
-    const [selectedRole, setSelectedRole] = useState<
-        "patient" | "therapist"
-    >("patient");
+}
 
-    const MOCK_USERS = {
-        patient: {
-            name: "Emma Wilson",
-            email: "emma@example.com",
-        },
-        therapist: {
-            name: "Dr. Sarah Mitchell",
-            email: "dr.mitchell@example.com",
-        },
-    };
+export default function LoginScreen({ navigation }: Props) {
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(""); // For inline error messages
 
-    const handleLogin = () => {
-        navigation.replace(
-            selectedRole === "patient" ? "Patient" : "Therapist"
-        );
+    const handleLogin = async () => {
+        if (!email || !password) {
+            setError("There is something wrong with the Email or Password");
+            return;
+        }
+
+        try {
+            setLoading(true);
+            setError(""); // Clear previous errors
+
+            // 1️⃣ Firebase Auth
+            const cred = await signInWithEmailAndPassword(
+                auth,
+                email.trim(),
+                password
+            );
+
+            const uid = cred.user.uid;
+
+            // 2️⃣ Fetch user profile from Firestore
+            const userRef = doc(db, "users", uid);
+            const snap = await getDoc(userRef);
+
+            if (!snap.exists()) {
+                setError("User profile not found");
+                return;
+            }
+
+            const userData = snap.data();
+
+            // 3️⃣ Route by role
+            if (userData.role === "therapist") {
+                navigation.replace("Therapist");
+            } else {
+                navigation.replace("Patient");
+            }
+        } catch (error: any) {
+            console.log(error.code, error.message);
+            setError(error.message); // Show Firebase error in red box
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -42,72 +80,53 @@ export default function LoginScreen({
                 <HeartHandshake size={36} color="white" />
             </View>
 
-            {/* Title */}
             <Text style={styles.title}>Journal Joe</Text>
             <Text style={styles.subtitle}>
-                Your friendly therapy-support companion
+                Your therapy-support companion
             </Text>
 
             {/* Card */}
             <View style={styles.card}>
-                <Text style={styles.sectionLabel}>Login as:</Text>
+                <Text style={styles.label}>Email</Text>
+                <TextInput
+                    style={styles.input}
+                    placeholder="Enter email"
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    value={email}
+                    onChangeText={setEmail}
+                />
 
-                {/* Role selector */}
-                <View style={styles.roleRow}>
-                    {["patient", "therapist"].map((role) => {
-                        const active = selectedRole === role;
-                        return (
-                            <TouchableOpacity
-                                key={role}
-                                onPress={() => setSelectedRole(role as any)}
-                                style={[
-                                    styles.roleButton,
-                                    active && styles.roleButtonActive,
-                                ]}
-                            >
-                                <Text
-                                    style={[
-                                        styles.roleText,
-                                        active && styles.roleTextActive,
-                                    ]}
-                                >
-                                    {role === "patient" ? "Patient" : "Therapist"}
-                                </Text>
-                            </TouchableOpacity>
-                        );
-                    })}
-                </View>
+                <Text style={styles.label}>Password</Text>
+                <TextInput
+                    style={styles.input}
+                    placeholder="Enter password"
+                    secureTextEntry
+                    value={password}
+                    onChangeText={setPassword}
+                />
 
-                {/* Demo account */}
-                <View style={styles.demoBox}>
-                    <Text style={styles.demoTitle}>Demo account:</Text>
-                    <Text style={styles.demoText}>
-                        <Text style={styles.bold}>Name:</Text>{" "}
-                        {MOCK_USERS[selectedRole].name}
-                    </Text>
-                    <Text style={styles.demoText}>
-                        <Text style={styles.bold}>Email:</Text>{" "}
-                        {MOCK_USERS[selectedRole].email}
-                    </Text>
-                </View>
+                {/* Error Box */}
+                {error ? (
+                    <View style={styles.errorBox}>
+                        <Text style={styles.errorText}>{error}</Text>
+                    </View>
+                ) : null}
 
-                {/* Continue button */}
                 <TouchableOpacity
-                    style={styles.continueButton}
+                    style={styles.button}
                     onPress={handleLogin}
+                    disabled={loading}
                 >
-                    <Text style={styles.continueText}>
-                        Continue as{" "}
-                        {selectedRole === "patient" ? "Patient" : "Therapist"}
+                    <Text style={styles.buttonText}>
+                        {loading ? "Signing in..." : "Sign In"}
                     </Text>
                 </TouchableOpacity>
 
-                {/* Disclaimer */}
                 <View style={styles.disclaimer}>
                     <Text style={styles.disclaimerText}>
-                        <Text style={styles.bold}>Disclaimer:</Text> This is a prototype
-                        for demonstration purposes only. Not for real patient data or
-                        professional therapy.
+                        <Text style={styles.bold}>Disclaimer:</Text> Prototype only.
+                        Not for real therapy or patient data.
                     </Text>
                 </View>
             </View>
@@ -121,7 +140,7 @@ const styles = StyleSheet.create({
         backgroundColor: "#EEF2FF",
         justifyContent: "center",
         alignItems: "center",
-        paddingHorizontal: 20,
+        padding: 20,
     },
 
     logoCircle: {
@@ -132,10 +151,6 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         alignItems: "center",
         marginBottom: 12,
-        shadowColor: "#7C3AED",
-        shadowOpacity: 0.35,
-        shadowRadius: 12,
-        elevation: 6,
     },
 
     title: {
@@ -147,7 +162,6 @@ const styles = StyleSheet.create({
     subtitle: {
         color: "#6B7280",
         marginBottom: 20,
-        textAlign: "center",
     },
 
     card: {
@@ -156,92 +170,65 @@ const styles = StyleSheet.create({
         backgroundColor: "white",
         borderRadius: 20,
         padding: 20,
-        shadowColor: "#000",
-        shadowOpacity: 0.08,
-        shadowRadius: 20,
         elevation: 6,
     },
 
-    sectionLabel: {
+    label: {
+        fontSize: 14,
         color: "#374151",
-        marginBottom: 10,
-        fontWeight: "500",
+        marginBottom: 6,
+        marginTop: 10,
     },
 
-    roleRow: {
-        flexDirection: "row",
-        gap: 10,
-        marginBottom: 14,
-    },
-
-    roleButton: {
-        flex: 1,
-        paddingVertical: 12,
-        borderRadius: 12,
+    input: {
         borderWidth: 1,
         borderColor: "#E5E7EB",
-        alignItems: "center",
-    },
-
-    roleButtonActive: {
-        borderColor: "#7C3AED",
-        backgroundColor: "#F5F3FF",
-    },
-
-    roleText: {
-        color: "#374151",
-        fontWeight: "500",
-    },
-
-    roleTextActive: {
-        color: "#6D28D9",
-        fontWeight: "600",
-    },
-
-    demoBox: {
-        backgroundColor: "#F8FAFC",
         borderRadius: 12,
-        padding: 14,
-        marginBottom: 16,
+        padding: 12,
+        fontSize: 15,
+        marginBottom: 10,
     },
 
-    demoTitle: {
-        color: "#6B7280",
-        marginBottom: 6,
-    },
-
-    demoText: {
-        color: "#111827",
-        fontSize: 14,
-    },
-
-    bold: {
-        fontWeight: "700",
-    },
-
-    continueButton: {
+    button: {
         backgroundColor: "#7C3AED",
-        borderRadius: 14,
         paddingVertical: 14,
+        borderRadius: 14,
         alignItems: "center",
-        marginBottom: 14,
+        marginTop: 10,
     },
 
-    continueText: {
+    buttonText: {
         color: "white",
         fontWeight: "600",
         fontSize: 15,
     },
 
     disclaimer: {
+        marginTop: 14,
         backgroundColor: "#FEF3C7",
-        borderRadius: 12,
         padding: 12,
+        borderRadius: 12,
     },
 
     disclaimerText: {
         fontSize: 12,
         color: "#92400E",
-        lineHeight: 16,
+    },
+
+    bold: {
+        fontWeight: "700",
+    },
+
+    // Error box styles
+    errorBox: {
+        backgroundColor: "#FEE2E2",
+        padding: 10,
+        borderRadius: 8,
+        marginBottom: 10,
+    },
+
+    errorText: {
+        color: "#B91C1C",
+        fontSize: 13,
     },
 });
