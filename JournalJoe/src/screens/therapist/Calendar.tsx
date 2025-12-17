@@ -1,201 +1,246 @@
-import React, { useState } from "react";
-import {
-    View,
-    Text,
-    StyleSheet,
-    ScrollView,
-    Pressable,
-} from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
+import { Calendar } from "react-native-calendars";
+import {
+    collection,
+    query,
+    where,
+    onSnapshot,
+    Timestamp,
+    updateDoc,
+    doc,
+    orderBy,
+} from "firebase/firestore";
+import { getAuth } from "firebase/auth";
+import { db } from "../../services/firebase";
+import { format } from "date-fns";
 
-const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+/* =====================================================
+   🔑 UTC-SAFE DATE HELPERS (CRITICAL FIX)
+   ===================================================== */
 
-function startOfWeek(date: Date) {
-    const d = new Date(date);
-    const day = d.getDay();
-    d.setDate(d.getDate() - day);
-    return d;
-}
+// UTC start of day
+const utcStartOfDay = (d: Date) =>
+    new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
 
-function addDays(date: Date, days: number) {
-    const d = new Date(date);
-    d.setDate(d.getDate() + days);
-    return d;
-}
+// UTC start of week (Sunday)
+const utcStartOfWeek = (d: Date) => {
+    const day = new Date(d);
+    const diff = day.getDate() - day.getDay();
+    return utcStartOfDay(new Date(day.setDate(diff)));
+};
 
-export default function Calendar() {
-    const [currentWeek, setCurrentWeek] = useState<Date>(
-        startOfWeek(new Date("2025-12-22"))
-    );
+// Add days in UTC
+const utcAddDays = (d: Date, n: number) => {
+    const x = new Date(d);
+    x.setUTCDate(x.getUTCDate() + n);
+    return x;
+};
 
-    const weekDays = Array.from({ length: 7 }).map((_, i) =>
-        addDays(currentWeek, i)
-    );
+/* ===================================================== */
 
-    const monthLabel = currentWeek.toLocaleDateString("en-US", {
-        month: "long",
-        year: "numeric",
+export default function TherapistCalendar() {
+    const user = getAuth().currentUser;
+
+    const [week, setWeek] = useState<Date>(utcStartOfWeek(new Date()));
+    const [sessions, setSessions] = useState<any[]>([]);
+    const [pending, setPending] = useState<any[]>([]);
+
+    useEffect(() => {
+        if (!user) return;
+
+        const start = utcStartOfWeek(week);
+        const end = utcAddDays(start, 7);
+
+        console.log(
+            "UTC QUERY RANGE:",
+            start.toISOString(),
+            "→",
+            end.toISOString()
+        );
+
+        /* ---------- THIS WEEK SESSIONS ---------- */
+        const sessionsQ = query(
+            collection(db, "sessions"),
+            where("therapistId", "==", user.uid),
+            where("date", ">=", Timestamp.fromDate(start)),
+            where("date", "<", Timestamp.fromDate(end)),
+            orderBy("date", "asc")
+        );
+
+        const unsubscribeSessions = onSnapshot(
+            sessionsQ,
+            snap => {
+                const list: any[] = [];
+                snap.forEach(d => {
+                    const data = d.data();
+                    if (!data.date) return;
+                    list.push({
+                        id: d.id,
+                        ...data,
+                        date: data.date.toDate(), // convert only for UI
+                    });
+                });
+                setSessions(list);
+            },
+            err => console.error("Firestore sessions error:", err)
+        );
+
+        /* ---------- PENDING REQUESTS ---------- */
+        const pendingQ = query(
+            collection(db, "sessions"),
+            where("therapistId", "==", user.uid),
+            where("status", "==", "pending"),
+            orderBy("date", "asc")
+        );
+
+        const unsubscribePending = onSnapshot(
+            pendingQ,
+            snap => {
+                const list: any[] = [];
+                snap.forEach(d => {
+                    const data = d.data();
+                    if (!data.date) return;
+                    list.push({
+                        id: d.id,
+                        ...data,
+                        date: data.date.toDate(),
+                    });
+                });
+                setPending(list);
+            },
+            err => console.error("Firestore pending error:", err)
+        );
+
+        return () => {
+            unsubscribeSessions();
+            unsubscribePending();
+        };
+    }, [week, user]);
+
+    const setStatus = (id: string, status: "accepted" | "rejected") =>
+        updateDoc(doc(db, "sessions", id), { status });
+
+    /* ---------- CALENDAR MARKING ---------- */
+    const markedDates: Record<string, any> = {};
+
+    sessions.forEach(s => {
+        const key = s.date.toISOString().split("T")[0];
+        markedDates[key] = { marked: true, dotColor: "#8A4EAF" };
     });
 
-    const weekLabel = `Week of ${currentWeek.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-    })}`;
+    const weekDates: Record<string, any> = {};
+    for (let i = 0; i < 7; i++) {
+        const d = utcAddDays(week, i).toISOString().split("T")[0];
+        weekDates[d] = {
+            ...(markedDates[d] || {}),
+            selected: true,
+            selectedColor: "#EDE9FE",
+        };
+    }
+
+    const weekRange = `${format(week, "MMM d")} – ${format(
+        utcAddDays(week, 6),
+        "MMM d"
+    )}`;
 
     return (
-        <ScrollView
-            style={{ backgroundColor: "#F9FAFB" }}
-            contentContainerStyle={styles.scroll}
-            showsVerticalScrollIndicator={false}
-        >
-            {/* Header */}
-            <Text style={styles.title}>Calendar</Text>
-            <Text style={styles.subtitle}>Your session schedule</Text>
+        <ScrollView style={{ padding: 16 }}>
+            <Text style={styles.title}>Therapist Calendar</Text>
 
-            {/* Week Selector */}
-            <View style={styles.weekCard}>
-                <View style={styles.weekHeader}>
-                    <Pressable
-                        onPress={() =>
-                            setCurrentWeek(addDays(currentWeek, -7))
-                        }
-                        style={styles.arrowBtn}
-                    >
-                        <Ionicons name="chevron-back" size={22} />
-                    </Pressable>
 
-                    <View style={styles.weekCenter}>
-                        <Text style={styles.monthText}>{monthLabel}</Text>
-                        <Text style={styles.weekText}>{weekLabel}</Text>
+            {/* Calendar */}
+            <Calendar
+                current={week.toISOString().split("T")[0]}
+                markedDates={weekDates}
+                onDayPress={day => console.log("Selected day", day.dateString)}
+            />
+
+            {/* Pending Requests */}
+            <Text style={styles.section}>Pending Requests</Text>
+            {pending.length === 0 && <Text>No pending requests</Text>}
+            {pending.map(s => (
+                <View key={s.id} style={styles.card}>
+                    <Text style={styles.sessionPatient}>{s.patientName}</Text>
+                    <Text style={styles.sessionTime}>
+                        {s.date.toLocaleString()}
+                    </Text>
+                    <View style={styles.row}>
+                        <Pressable onPress={() => setStatus(s.id, "accepted")}>
+                            <Text style={styles.accept}>ACCEPT</Text>
+                        </Pressable>
+                        <Pressable onPress={() => setStatus(s.id, "rejected")}>
+                            <Text style={styles.reject}>REJECT</Text>
+                        </Pressable>
                     </View>
-
-                    <Pressable
-                        onPress={() =>
-                            setCurrentWeek(addDays(currentWeek, 7))
-                        }
-                        style={styles.arrowBtn}
-                    >
-                        <Ionicons name="chevron-forward" size={22} />
-                    </Pressable>
                 </View>
+            ))}
 
-                <Pressable
-                    style={styles.todayBtn}
-                    onPress={() =>
-                        setCurrentWeek(startOfWeek(new Date()))
-                    }
-                >
-                    <Text style={styles.todayText}>Today</Text>
+            {/* Week Navigation */}
+            <View style={styles.nav}>
+                <Pressable onPress={() => setWeek(utcAddDays(week, -7))}>
+                    <Ionicons name="chevron-back" size={22} />
+                </Pressable>
+                <Text style={{ fontWeight: "700" }}>{weekRange}</Text>
+                <Pressable onPress={() => setWeek(utcAddDays(week, 7))}>
+                    <Ionicons name="chevron-forward" size={22} />
                 </Pressable>
             </View>
 
-            {/* Days List */}
-            {weekDays.map(date => {
-                const dayName = DAYS[date.getDay()];
-                const dateLabel = date.toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                });
-
-                return (
-                    <View key={date.toISOString()} style={styles.dayCard}>
-                        <Text style={styles.dayName}>{dayName}</Text>
-                        <Text style={styles.dayDate}>{dateLabel}</Text>
-                        <Text style={styles.dayStatus}>
-                            No sessions scheduled
-                        </Text>
-                    </View>
-                );
-            })}
+            {/* Sessions This Week */}
+            <Text style={styles.section}>Sessions This Week</Text>
+            {sessions.length === 0 && <Text>No sessions this week</Text>}
+            {sessions.map(s => (
+                <View key={s.id} style={styles.card}>
+                    <Text style={styles.sessionTime}>
+                        {s.date.toLocaleDateString()}{" "}
+                        {s.date.toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                        })}
+                    </Text>
+                    <Text style={styles.sessionPatient}>{s.patientName}</Text>
+                    <Text
+                        style={{
+                            fontWeight: "700",
+                            color:
+                                s.status === "accepted"
+                                    ? "#10B981"
+                                    : s.status === "rejected"
+                                        ? "#EF4444"
+                                        : "#FBBF24",
+                        }}
+                    >
+                        {s.status.toUpperCase()}
+                    </Text>
+                </View>
+            ))}
         </ScrollView>
     );
 }
 
-/* ---------------- Styles ---------------- */
+/* ================= STYLES ================= */
 
 const styles = StyleSheet.create({
-    scroll: {
-        padding: 16,
-        paddingBottom: 24,
-    },
-
-    title: {
-        fontSize: 22,
-        fontWeight: "700",
-        marginBottom: 4,
-    },
-    subtitle: {
-        color: "#6B7280",
-        marginBottom: 16,
-    },
-
-    weekCard: {
-        backgroundColor: "#FFFFFF",
-        borderRadius: 16,
-        padding: 16,
+    title: { fontSize: 22, fontWeight: "800" },
+    section: { marginTop: 20, fontWeight: "700", fontSize: 18 },
+    card: {
         borderWidth: 1,
         borderColor: "#E5E7EB",
-        marginBottom: 16,
-    },
-
-    weekHeader: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        marginBottom: 12,
-    },
-
-    arrowBtn: {
-        padding: 6,
-    },
-
-    weekCenter: {
-        alignItems: "center",
-    },
-
-    monthText: {
-        fontWeight: "700",
-        fontSize: 16,
-    },
-
-    weekText: {
-        color: "#6B7280",
-        fontSize: 13,
-        marginTop: 2,
-    },
-
-    todayBtn: {
-        backgroundColor: "#7C3AED",
         borderRadius: 12,
-        paddingVertical: 10,
+        padding: 12,
+        marginVertical: 8,
+    },
+    row: { flexDirection: "row", justifyContent: "space-between" },
+    accept: { color: "#10B981", fontWeight: "700" },
+    reject: { color: "#EF4444", fontWeight: "700" },
+    nav: {
+        flexDirection: "row",
+        justifyContent: "space-between",
         alignItems: "center",
+        marginVertical: 20,
     },
-
-    todayText: {
-        color: "white",
-        fontWeight: "600",
-    },
-
-    dayCard: {
-        backgroundColor: "#FFFFFF",
-        borderRadius: 16,
-        padding: 16,
-        borderWidth: 1,
-        borderColor: "#E5E7EB",
-        marginBottom: 12,
-    },
-
-    dayName: {
-        fontWeight: "700",
-        fontSize: 16,
-    },
-
-    dayDate: {
-        color: "#6B7280",
-        marginBottom: 8,
-    },
-
-    dayStatus: {
-        color: "#9CA3AF",
-    },
+    sessionTime: { fontWeight: "700" },
+    sessionPatient: { fontSize: 16, marginTop: 4 },
 });

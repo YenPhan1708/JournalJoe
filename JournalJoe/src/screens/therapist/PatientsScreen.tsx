@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
     View,
     Text,
@@ -9,123 +9,309 @@ import {
 } from "react-native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useNavigation } from "@react-navigation/native";
+import {
+    collection,
+    onSnapshot,
+    query,
+    where,
+    orderBy,
+    Timestamp,
+} from "firebase/firestore";
+import { db } from "../../services/firebase";
 import { RootStackParamList } from "../../../App";
 
-type NavProp = NativeStackNavigationProp<RootStackParamList, "Patient">;
+/* =======================
+   TYPES
+======================= */
 
-const mockPatients = [
-    { id: "p1", name: "Emma Wilson", patientSince: "Sep 15", mood: "Stable", nextSession: "Dec 12" },
-    { id: "p2", name: "Michael Chen", patientSince: "Oct 1", mood: "Declining", nextSession: "Dec 10" },
-    { id: "p3", name: "Sofia Rodriguez", patientSince: "Aug 20", mood: "Improving", nextSession: "Dec 11" },
-];
+type NavProp = NativeStackNavigationProp<
+    RootStackParamList,
+    "PatientDetail"
+>;
+
+interface Patient {
+    id: string;
+    name: string;
+    email: string;
+    createdAt?: Timestamp;
+}
+
+interface Session {
+    id: string;
+    patientId: string;
+    date: Timestamp;
+    status: "accepted" | "pending" | "rejected";
+}
+
+/* =======================
+   COMPONENT
+======================= */
 
 export default function PatientsScreen() {
     const navigation = useNavigation<NavProp>();
+
+    const [patients, setPatients] = useState<Patient[]>([]);
+    const [sessions, setSessions] = useState<Session[]>([]);
     const [search, setSearch] = useState("");
 
-    const renderMood = (mood: string) => {
-        switch (mood) {
-            case "Stable":
-                return <Text style={styles.moodStable}>— Stable</Text>;
-            case "Declining":
-                return <Text style={styles.moodDeclining}>⚠ Declining</Text>;
-            case "Improving":
-                return <Text style={styles.moodImproving}>↗ Improving</Text>;
-            default:
-                return <Text>{mood}</Text>;
-        }
+    /* =======================
+       FETCH PATIENTS
+    ======================= */
+
+    useEffect(() => {
+        const q = query(
+            collection(db, "users"),
+            where("role", "==", "patient")
+        );
+
+        const unsub = onSnapshot(q, snap => {
+            setPatients(
+                snap.docs.map(d => ({
+                    id: d.id,
+                    ...(d.data() as Omit<Patient, "id">),
+                }))
+            );
+        });
+
+        return unsub;
+    }, []);
+
+    /* =======================
+       FETCH SESSIONS
+    ======================= */
+
+    useEffect(() => {
+        const q = query(
+            collection(db, "sessions"),
+            where("status", "==", "accepted"),
+            orderBy("date", "asc")
+        );
+
+        const unsub = onSnapshot(q, snap => {
+            setSessions(
+                snap.docs.map(d => ({
+                    id: d.id,
+                    ...(d.data() as Omit<Session, "id">),
+                }))
+            );
+        });
+
+        return unsub;
+    }, []);
+
+    /* =======================
+       HELPERS
+    ======================= */
+
+    const today = useMemo(() => {
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
+        return d;
+    }, []);
+
+    const getNextSessionDate = (patientId: string) => {
+        const s = sessions.find(
+            s =>
+                s.patientId === patientId &&
+                s.date.toDate() >= today
+        );
+
+        return s
+            ? s.date
+                .toDate()
+                .toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                })
+            : "—";
     };
+
+    const getMoodTrendLabel = () => {
+        // Placeholder logic (future AI-based)
+        return "Stable";
+    };
+
+    const filteredPatients = patients.filter(p =>
+        p.name.toLowerCase().includes(search.toLowerCase())
+    );
+
+    /* =======================
+       RENDER
+    ======================= */
 
     return (
         <View style={styles.container}>
             <Text style={styles.title}>Patients</Text>
-            <Text style={styles.subtitle}>Manage your patient caseload</Text>
+            <Text style={styles.subtitle}>
+                Manage your patient caseload
+            </Text>
 
-            <TextInput
-                style={styles.searchBar}
-                placeholder="🔍 Search patients..."
-                placeholderTextColor="#9CA3AF"
-                value={search}
-                onChangeText={setSearch}
-            />
+            <View style={styles.searchWrapper}>
+                <TextInput
+                    style={styles.searchBar}
+                    placeholder="Search patients..."
+                    value={search}
+                    onChangeText={setSearch}
+                />
+            </View>
 
             <FlatList
-                data={mockPatients.filter(p =>
-                    p.name.toLowerCase().includes(search.toLowerCase())
-                )}
-                keyExtractor={(item) => item.id}
+                data={filteredPatients}
+                keyExtractor={item => item.id}
+                showsVerticalScrollIndicator={false}
                 renderItem={({ item }) => (
                     <TouchableOpacity
                         style={styles.card}
                         onPress={() =>
-                            navigation.navigate("PatientDetail", { patientId: item.id })
+                            navigation.navigate("PatientDetail", {
+                                patientId: item.id,
+                            })
                         }
                     >
-                        <View style={styles.cardRow}>
+                        <View style={styles.cardTop}>
                             <View style={styles.avatar}>
                                 <Text style={styles.avatarText}>
-                                    {item.name.split(" ").map(n => n[0]).join("")}
+                                    {item.name
+                                        .split(" ")
+                                        .map(n => n[0])
+                                        .join("")
+                                        .toUpperCase()}
                                 </Text>
                             </View>
 
                             <View style={{ flex: 1 }}>
-                                <Text style={styles.cardTitle}>{item.name}</Text>
-                                <Text style={styles.cardSub}>
-                                    Patient since {item.patientSince}
+                                <Text style={styles.cardTitle}>
+                                    {item.name}
                                 </Text>
-                                {renderMood(item.mood)}
+                                <Text style={styles.cardSub}>
+                                    Patient since{" "}
+                                    {item.createdAt
+                                        ? item.createdAt
+                                            .toDate()
+                                            .toLocaleDateString("en-US", {
+                                                month: "short",
+                                                day: "numeric",
+                                            })
+                                        : "—"}
+                                </Text>
                             </View>
 
-                            <Text style={styles.nextSession}>{item.nextSession}</Text>
+                            <Text style={styles.chevron}>›</Text>
+                        </View>
+
+                        <View style={styles.cardBottom}>
+                            <View>
+                                <Text style={styles.metaLabel}>
+                                    Mood Trend
+                                </Text>
+                                <Text style={styles.metaValue}>
+                                    — {getMoodTrendLabel()}
+                                </Text>
+                            </View>
+
+                            <View>
+                                <Text style={styles.metaLabel}>
+                                    Next Session
+                                </Text>
+                                <Text style={styles.metaValue}>
+                                    {getNextSessionDate(item.id)}
+                                </Text>
+                            </View>
                         </View>
                     </TouchableOpacity>
                 )}
-                ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
             />
         </View>
     );
 }
 
+/* =======================
+   STYLES
+======================= */
+
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: "#F9FAFB", padding: 16 },
-    title: { fontSize: 20, fontWeight: "600" },
-    subtitle: { color: "#6B7280", marginBottom: 12 },
+    container: {
+        flex: 1,
+        padding: 16,
+        backgroundColor: "#FFFFFF",
+    },
+
+    title: {
+        fontSize: 24,
+        fontWeight: "700",
+        marginBottom: 4,
+    },
+    subtitle: {
+        color: "#6B7280",
+        marginBottom: 16,
+    },
+
+    searchWrapper: {
+        marginBottom: 16,
+    },
     searchBar: {
         backgroundColor: "#FFFFFF",
-        borderRadius: 12,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        marginBottom: 12,
+        borderRadius: 14,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
         borderWidth: 1,
         borderColor: "#E5E7EB",
-        color: "#111827",
     },
+
     card: {
-        backgroundColor: "white",
-        borderRadius: 14,
-        padding: 12,
+        backgroundColor: "#FFFFFF",
+        borderRadius: 16,
         borderWidth: 1,
-        borderColor: "#F3F4F6",
-        shadowColor: "#000",
-        shadowOpacity: 0.05,
-        shadowRadius: 4,
-        shadowOffset: { width: 0, height: 2 },
+        borderColor: "#E5E7EB",
+        padding: 16,
+        marginBottom: 12,
     },
-    cardRow: { flexDirection: "row", alignItems: "center" },
+
+    cardTop: {
+        flexDirection: "row",
+        alignItems: "center",
+        marginBottom: 12,
+    },
+
     avatar: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: "#8A4EAF",
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: "#EDE9FE",
         alignItems: "center",
         justifyContent: "center",
         marginRight: 12,
     },
-    avatarText: { color: "#FFFFFF", fontWeight: "700" },
-    cardTitle: { fontWeight: "700", fontSize: 16 },
-    cardSub: { fontSize: 12, color: "#6B7280" },
-    moodStable: { color: "#111827", fontSize: 12, marginTop: 2 },
-    moodDeclining: { color: "#F97316", fontSize: 12, marginTop: 2 },
-    moodImproving: { color: "#10B981", fontSize: 12, marginTop: 2 },
-    nextSession: { fontWeight: "700", marginLeft: 8, color: "#111827" },
+    avatarText: {
+        fontWeight: "700",
+        color: "#7C3AED",
+    },
+
+    cardTitle: {
+        fontSize: 16,
+        fontWeight: "700",
+    },
+    cardSub: {
+        fontSize: 12,
+        color: "#6B7280",
+    },
+
+    chevron: {
+        fontSize: 24,
+        color: "#9CA3AF",
+    },
+
+    cardBottom: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+    },
+
+    metaLabel: {
+        fontSize: 12,
+        color: "#6B7280",
+    },
+    metaValue: {
+        fontWeight: "600",
+        marginTop: 2,
+    },
 });

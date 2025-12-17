@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
     View,
     Text,
@@ -6,8 +6,12 @@ import {
     ScrollView,
     Pressable,
     SafeAreaView,
+    ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { getAuth, signOut } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../../services/firebase";
 
 const PURPLE = "#6D28D9";
 const TEXT_PRIMARY = "#111827";
@@ -15,6 +19,60 @@ const TEXT_SECONDARY = "#6B7280";
 const BORDER = "#E5E7EB";
 
 export default function Profile({ navigation }: any) {
+    const auth = getAuth();
+    const user = auth.currentUser;
+
+    const [loading, setLoading] = useState(true);
+    const [profile, setProfile] = useState<{
+        name: string;
+        email: string;
+    } | null>(null);
+
+    useEffect(() => {
+        if (!user) return;
+
+        const loadProfile = async () => {
+            const snap = await getDoc(doc(db, "users", user.uid));
+            if (snap.exists()) {
+                const data = snap.data();
+                setProfile({
+                    name: data.name,
+                    email: data.email,
+                });
+            }
+            setLoading(false);
+        };
+
+        loadProfile();
+    }, [user]);
+
+    const handleSignOut = async () => {
+        await signOut(auth);
+        navigation.replace("Login");
+    };
+
+    if (loading) {
+        return (
+            <View style={styles.loader}>
+                <ActivityIndicator size="large" color={PURPLE} />
+            </View>
+        );
+    }
+
+    if (!profile) {
+        return (
+            <View style={styles.loader}>
+                <Text>Profile not found</Text>
+            </View>
+        );
+    }
+
+    const initials = profile.name
+        .split(" ")
+        .map(n => n[0])
+        .join("")
+        .toUpperCase();
+
     return (
         <SafeAreaView style={styles.safe}>
             <ScrollView
@@ -27,28 +85,30 @@ export default function Profile({ navigation }: any) {
                 {/* User Profile Card */}
                 <View style={styles.profileCard}>
                     <View style={styles.avatar}>
-                        <Text style={styles.avatarText}>EW</Text>
+                        <Text style={styles.avatarText}>{initials}</Text>
                     </View>
 
-                    <Text style={styles.name}>Emma Wilson</Text>
-                    <Text style={styles.email}>emma@example.com</Text>
+                    <Text style={styles.name}>{profile.name}</Text>
+                    <Text style={styles.email}>{profile.email}</Text>
                 </View>
 
-                {/* About Journal Joe */}
-                <View style={styles.card}>
+                {/* About Journal Joe — MATCH DESIGN */}
+                <View style={[styles.card, styles.aboutCard]}>
                     <View style={styles.cardHeader}>
-                        <Ionicons
-                            name="chatbubble-outline"
-                            size={20}
-                            color={PURPLE}
-                        />
+                        <View style={styles.aboutIcon}>
+                            <Ionicons
+                                name="chatbubble-outline"
+                                size={18}
+                                color="white"
+                            />
+                        </View>
                         <Text style={styles.cardTitle}>About Journal Joe</Text>
                     </View>
 
                     <Text style={styles.cardText}>
-                        Joe is your AI companion designed to support your mental
-                        health journey. He helps you reflect, track emotions, and
-                        prepare for therapy sessions in a safe, judgment-free space.
+                        Joe is your AI companion for journaling and
+                        self-reflection. He provides supportive, non-clinical
+                        feedback to help you process your thoughts and feelings.
                     </Text>
 
                     <View style={styles.cardFooter}>
@@ -61,6 +121,8 @@ export default function Profile({ navigation }: any) {
 
                 {/* Therapist Card */}
                 <View style={styles.card}>
+                    <Text style={styles.sectionTitle}>Your Therapist</Text>
+
                     <View style={styles.therapistRow}>
                         <View style={styles.therapistAvatar}>
                             <Text style={styles.therapistInitials}>SM</Text>
@@ -77,7 +139,7 @@ export default function Profile({ navigation }: any) {
                     </View>
                 </View>
 
-                {/* Navigation Items */}
+                {/* Navigation Items (placeholders) */}
                 <NavItem icon="shield-checkmark-outline" text="Privacy & Security" />
                 <NavItem icon="document-text-outline" text="Terms of Use" />
                 <NavItem icon="help-circle-outline" text="Help & Support" />
@@ -93,17 +155,22 @@ export default function Profile({ navigation }: any) {
                         professional therapy
                     </Text>
                     <Text style={styles.disclaimerItem}>
-                        • All AI outputs comply with EU AI Act as non-clinical support only
+                        • Joe&apos;s AI feedback is non-clinical and for reflection purposes only
+                    </Text>
+
+                    <Text style={styles.disclaimerItem}>
+                        • In case of emergency, contact emergency services
+                        immediately
+                    </Text>
+                    <Text style={styles.disclaimerItem}>
+                        • All AI outputs comply with EU AI Act as non-clinical
+                        support only
                     </Text>
                 </View>
 
                 {/* Sign Out */}
-                <Pressable
-                    style={styles.signOut}
-                    onPress={() => navigation.replace("Login")}
-                >
+                <Pressable style={styles.signOut} onPress={handleSignOut}>
                     <Text style={styles.signOutText}>Sign Out</Text>
-
                     <Ionicons
                         name="log-out-outline"
                         size={18}
@@ -112,12 +179,13 @@ export default function Profile({ navigation }: any) {
                     />
                 </Pressable>
 
-
                 <View style={{ height: 40 }} />
             </ScrollView>
         </SafeAreaView>
     );
 }
+
+/* ---------------- Nav Item ---------------- */
 
 function NavItem({
                      icon,
@@ -134,14 +202,12 @@ function NavItem({
     );
 }
 
+/* ---------------- Styles ---------------- */
+
 const styles = StyleSheet.create({
-    safe: {
-        flex: 1,
-        backgroundColor: "white",
-    },
-    scroll: {
-        padding: 16,
-    },
+    safe: { flex: 1, backgroundColor: "white" },
+    scroll: { padding: 16 },
+    loader: { flex: 1, justifyContent: "center", alignItems: "center" },
 
     title: {
         fontSize: 28,
@@ -150,7 +216,6 @@ const styles = StyleSheet.create({
         marginBottom: 20,
     },
 
-    /* Profile Card */
     profileCard: {
         backgroundColor: "white",
         borderRadius: 20,
@@ -158,9 +223,6 @@ const styles = StyleSheet.create({
         alignItems: "center",
         borderWidth: 1,
         borderColor: "#EDE9FE",
-        shadowColor: PURPLE,
-        shadowOpacity: 0.08,
-        shadowRadius: 12,
         marginBottom: 20,
     },
     avatar: {
@@ -188,7 +250,6 @@ const styles = StyleSheet.create({
         marginTop: 4,
     },
 
-    /* Cards */
     card: {
         backgroundColor: "white",
         borderRadius: 16,
@@ -197,10 +258,23 @@ const styles = StyleSheet.create({
         borderColor: BORDER,
         marginBottom: 14,
     },
+
+    aboutCard: {
+        borderColor: "#E9D5FF",
+    },
+
     cardHeader: {
         flexDirection: "row",
         alignItems: "center",
         marginBottom: 8,
+    },
+    aboutIcon: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: PURPLE,
+        alignItems: "center",
+        justifyContent: "center",
     },
     cardTitle: {
         fontSize: 16,
@@ -218,16 +292,20 @@ const styles = StyleSheet.create({
         alignItems: "center",
         marginTop: 10,
     },
-    heart: {
-        marginRight: 6,
-    },
+    heart: { marginRight: 6 },
     footerText: {
         fontSize: 13,
         color: PURPLE,
         fontWeight: "500",
     },
 
-    /* Therapist */
+    sectionTitle: {
+        fontSize: 15,
+        fontWeight: "700",
+        marginBottom: 10,
+        color: TEXT_PRIMARY,
+    },
+
     therapistRow: {
         flexDirection: "row",
         alignItems: "center",
@@ -242,7 +320,7 @@ const styles = StyleSheet.create({
         marginRight: 12,
     },
     therapistInitials: {
-        color: "#1D4ED8",
+        color: "#2563EB",
         fontWeight: "700",
     },
     therapistName: {
@@ -255,7 +333,6 @@ const styles = StyleSheet.create({
         color: TEXT_SECONDARY,
     },
 
-    /* Nav Items */
     navItem: {
         flexDirection: "row",
         alignItems: "center",
@@ -272,7 +349,6 @@ const styles = StyleSheet.create({
         color: TEXT_PRIMARY,
     },
 
-    /* Disclaimer */
     disclaimer: {
         backgroundColor: "#FFFBEB",
         borderRadius: 16,
@@ -293,7 +369,6 @@ const styles = StyleSheet.create({
         marginBottom: 4,
     },
 
-    /* Sign Out */
     signOut: {
         backgroundColor: "#FEF2F2",
         borderRadius: 14,
@@ -311,5 +386,4 @@ const styles = StyleSheet.create({
         position: "absolute",
         right: 16,
     },
-
 });

@@ -112,7 +112,7 @@ export default function MoodChart({ data }: Props) {
 
     return (
         <View style={styles.card}>
-            <Text style={styles.title}>Entries Over Time</Text>
+            <Text style={styles.title}>Mood Trend</Text>
 
             <View
                 style={{
@@ -226,7 +226,7 @@ export default function MoodChart({ data }: Props) {
                     >
                         <Text style={styles.tooltipLabel}>{tooltip.label}</Text>
                         <Text style={styles.tooltipValue}>
-                            Entries: {tooltip.value}
+                            Mood Score: {tooltip.value}
                         </Text>
                     </Animated.View>
                 )}

@@ -1,38 +1,50 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import {
     LayoutDashboard,
     Users,
-    Calendar as CalIcon,
-    User as UserIcon,
+    Calendar,
+    User,
     LogOut,
 } from "lucide-react-native";
+import { auth, db } from "../../services/firebase";
+import { doc, getDoc } from "firebase/firestore";
 
 import Dashboard from "./Dashboard";
 import PatientsScreen from "./PatientsScreen";
-import Calendar from "./Calendar";
+import CalendarScreen from "./Calendar";
 import Profile from "./Profile";
-import { useNavigation } from "@react-navigation/native";
-import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { RootStackParamList } from "../../../App";
-
-type ViewName = "dashboard" | "patients" | "calendar" | "profile";
-type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
 const ACCENT = "#7C3AED";
 
 export default function TherapistRoot() {
-    const navigation = useNavigation<NavProp>();
-    const [activeView, setActiveView] = useState<ViewName>("dashboard");
+    const [activeView, setActiveView] = useState<
+        "dashboard" | "patients" | "calendar" | "profile"
+    >("dashboard");
+
+    const [name, setName] = useState("");
+
+    /* =======================
+       LOAD THERAPIST
+    ======================= */
+
+    useEffect(() => {
+        const user = auth.currentUser;
+        if (!user) return;
+
+        getDoc(doc(db, "users", user.uid)).then(snap => {
+            if (snap.exists()) {
+                setName(snap.data().name);
+            }
+        });
+    }, []);
 
     const renderView = () => {
         switch (activeView) {
-            case "dashboard":
-                return <Dashboard />;
             case "patients":
                 return <PatientsScreen />;
             case "calendar":
-                return <Calendar />;
+                return <CalendarScreen />;
             case "profile":
                 return <Profile />;
             default:
@@ -45,13 +57,13 @@ export default function TherapistRoot() {
             {/* HEADER */}
             <View style={styles.header}>
                 <View>
-                    <Text style={styles.headerTitle}>Journal Joe </Text>
-                    <Text style={styles.headerSub}>Dr. Sarah Mitchell</Text>
+                    <Text style={styles.headerTitle}>Journal Joe</Text>
+                    <Text style={styles.headerSub}>{name}</Text>
                 </View>
 
                 <TouchableOpacity
                     style={styles.iconBtn}
-                    onPress={() => navigation.navigate("Login")}
+                    onPress={() => auth.signOut()}
                 >
                     <LogOut size={18} color="#4B5563" />
                 </TouchableOpacity>
@@ -60,51 +72,18 @@ export default function TherapistRoot() {
             {/* CONTENT */}
             <View style={styles.content}>{renderView()}</View>
 
-            {/* BOTTOM NAV */}
+            {/* NAV */}
             <View style={styles.bottomNav}>
-                <NavItem
-                    label="Dashboard"
-                    icon={<LayoutDashboard size={20} />}
-                    active={activeView === "dashboard"}
-                    onPress={() => setActiveView("dashboard")}
-                />
-
-                <NavItem
-                    label="Patients"
-                    icon={<Users size={20} />}
-                    active={activeView === "patients"}
-                    onPress={() => setActiveView("patients")}
-                />
-
-                <NavItem
-                    label="Calendar"
-                    icon={<CalIcon size={20} />}
-                    active={activeView === "calendar"}
-                    onPress={() => setActiveView("calendar")}
-                />
-
-                <NavItem
-                    label="Profile"
-                    icon={<UserIcon size={20} />}
-                    active={activeView === "profile"}
-                    onPress={() => setActiveView("profile")}
-                />
+                <NavItem label="Dashboard" icon={<LayoutDashboard size={20} />} active={activeView === "dashboard"} onPress={() => setActiveView("dashboard")} />
+                <NavItem label="Patients" icon={<Users size={20} />} active={activeView === "patients"} onPress={() => setActiveView("patients")} />
+                <NavItem label="Calendar" icon={<Calendar size={20} />} active={activeView === "calendar"} onPress={() => setActiveView("calendar")} />
+                <NavItem label="Profile" icon={<User size={20} />} active={activeView === "profile"} onPress={() => setActiveView("profile")} />
             </View>
         </View>
     );
 }
 
-function NavItem({
-                     label,
-                     icon,
-                     active,
-                     onPress,
-                 }: {
-    label: string;
-    icon: React.ReactNode;
-    active: boolean;
-    onPress: () => void;
-}) {
+function NavItem({ label, icon, active, onPress }: any) {
     return (
         <TouchableOpacity onPress={onPress} style={styles.navItem}>
             <View style={active && styles.activeIconBg}>{icon}</View>
@@ -118,26 +97,19 @@ function NavItem({
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: "#FFFFFF" },
     header: {
-        backgroundColor: "white",
         borderBottomWidth: 1,
         borderBottomColor: "#E5E7EB",
-        paddingHorizontal: 16,
-        paddingVertical: 12,
+        padding: 16,
         flexDirection: "row",
         justifyContent: "space-between",
-        alignItems: "center",
     },
-    headerTitle: { fontSize: 18, fontWeight: "700", color: "#111827" },
-    headerSub: { fontSize: 13, color: "#6B7280", marginTop: 2 },
+    headerTitle: { fontSize: 18, fontWeight: "700" },
+    headerSub: { fontSize: 13, color: "#6B7280" },
     iconBtn: { padding: 6 },
-
     content: { flex: 1 },
-
     bottomNav: {
         flexDirection: "row",
         justifyContent: "space-around",
-        alignItems: "center",
-        backgroundColor: "white",
         borderTopWidth: 1,
         borderTopColor: "#E5E7EB",
         paddingVertical: 10,
