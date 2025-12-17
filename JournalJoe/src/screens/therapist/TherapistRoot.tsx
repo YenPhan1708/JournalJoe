@@ -10,6 +10,9 @@ import {
 import { auth, db } from "../../services/firebase";
 import { doc, getDoc } from "firebase/firestore";
 
+import { useNavigation } from "@react-navigation/native";
+import { StackNavigationProp } from "@react-navigation/stack";
+
 import Dashboard from "./Dashboard";
 import PatientsScreen from "./PatientsScreen";
 import CalendarScreen from "./Calendar";
@@ -17,27 +20,61 @@ import Profile from "./Profile";
 
 const ACCENT = "#7C3AED";
 
+/* ========================
+   Define your stack params
+======================== */
+type RootStackParamList = {
+    Login: undefined;
+    TherapistRoot: undefined;
+    // Add other screens if you have
+};
+
+type TherapistRootNavigationProp = StackNavigationProp<
+    RootStackParamList,
+    "TherapistRoot"
+>;
+
 export default function TherapistRoot() {
     const [activeView, setActiveView] = useState<
         "dashboard" | "patients" | "calendar" | "profile"
     >("dashboard");
-
     const [name, setName] = useState("");
+    const navigation = useNavigation<TherapistRootNavigationProp>();
 
     /* =======================
        LOAD THERAPIST
     ======================= */
-
     useEffect(() => {
         const user = auth.currentUser;
         if (!user) return;
 
-        getDoc(doc(db, "users", user.uid)).then(snap => {
+        getDoc(doc(db, "users", user.uid)).then((snap) => {
             if (snap.exists()) {
                 setName(snap.data().name);
             }
         });
     }, []);
+
+    /* =======================
+       AUTH STATE LISTENER
+    ======================= */
+    useEffect(() => {
+        const unsubscribe = auth.onAuthStateChanged((user) => {
+            if (!user) {
+                navigation.replace("Login"); // TS-safe
+            }
+        });
+
+        return unsubscribe;
+    }, [navigation]);
+
+    const handleLogout = async () => {
+        try {
+            await auth.signOut();
+        } catch (error) {
+            console.log("Error signing out:", error);
+        }
+    };
 
     const renderView = () => {
         switch (activeView) {
@@ -63,7 +100,7 @@ export default function TherapistRoot() {
 
                 <TouchableOpacity
                     style={styles.iconBtn}
-                    onPress={() => auth.signOut()}
+                    onPress={handleLogout}
                 >
                     <LogOut size={18} color="#4B5563" />
                 </TouchableOpacity>
@@ -74,10 +111,30 @@ export default function TherapistRoot() {
 
             {/* NAV */}
             <View style={styles.bottomNav}>
-                <NavItem label="Dashboard" icon={<LayoutDashboard size={20} />} active={activeView === "dashboard"} onPress={() => setActiveView("dashboard")} />
-                <NavItem label="Patients" icon={<Users size={20} />} active={activeView === "patients"} onPress={() => setActiveView("patients")} />
-                <NavItem label="Calendar" icon={<Calendar size={20} />} active={activeView === "calendar"} onPress={() => setActiveView("calendar")} />
-                <NavItem label="Profile" icon={<User size={20} />} active={activeView === "profile"} onPress={() => setActiveView("profile")} />
+                <NavItem
+                    label="Dashboard"
+                    icon={<LayoutDashboard size={20} />}
+                    active={activeView === "dashboard"}
+                    onPress={() => setActiveView("dashboard")}
+                />
+                <NavItem
+                    label="Patients"
+                    icon={<Users size={20} />}
+                    active={activeView === "patients"}
+                    onPress={() => setActiveView("patients")}
+                />
+                <NavItem
+                    label="Calendar"
+                    icon={<Calendar size={20} />}
+                    active={activeView === "calendar"}
+                    onPress={() => setActiveView("calendar")}
+                />
+                <NavItem
+                    label="Profile"
+                    icon={<User size={20} />}
+                    active={activeView === "profile"}
+                    onPress={() => setActiveView("profile")}
+                />
             </View>
         </View>
     );
