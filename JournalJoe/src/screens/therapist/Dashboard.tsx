@@ -6,16 +6,11 @@ import {
     where,
     orderBy,
     limit,
-    getDocs,
+    onSnapshot,
     Timestamp,
 } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
 import { db } from "../../services/firebase";
-
-/* =======================
-   CONFIG
-======================= */
-
-const THERAPIST_ID = "THERAPIST_ID";
 
 /* =======================
    TYPES
@@ -42,14 +37,17 @@ interface Session {
 }
 
 /* =======================
-   HELPERS
+   DATE HELPERS (LOCAL)
 ======================= */
 
-const formatName = (name?: string) =>
-    name ? name.toUpperCase() : "UNKNOWN PATIENT";
+const startOfDay = (d: Date) => {
+    const x = new Date(d);
+    x.setHours(0, 0, 0, 0);
+    return x;
+};
 
-const getWeekRange = () => {
-    const today = new Date();
+const getCurrentWeekRange = () => {
+    const today = startOfDay(new Date());
 
     const monday = new Date(today);
     monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
@@ -62,6 +60,9 @@ const getWeekRange = () => {
     return { start: monday, end: sunday };
 };
 
+const formatName = (name?: string) =>
+    name ? name.toUpperCase() : "UNKNOWN PATIENT";
+
 const sessionIcon = (type: string) => {
     if (type === "video") return "📹";
     if (type === "in-person") return "🪑";
@@ -73,72 +74,76 @@ const sessionIcon = (type: string) => {
 ======================= */
 
 export default function Dashboard() {
+    const user = getAuth().currentUser;
+
     const [activePatients, setActivePatients] = useState(0);
     const [sessionsThisWeek, setSessionsThisWeek] = useState(0);
     const [upcomingSessions, setUpcomingSessions] = useState<Session[]>([]);
     const [journals, setJournals] = useState<Journal[]>([]);
 
     useEffect(() => {
-        fetchDashboardData();
-    }, []);
+        if (!user) return;
 
-    const fetchDashboardData = async () => {
         /* =======================
            SHARED JOURNALS
         ======================= */
 
-        const journalQuery = query(
+        const journalQ = query(
             collection(db, "journals"),
             where("shared", "==", true),
             orderBy("createdAt", "desc"),
             limit(10)
         );
 
-        const journalSnap = await getDocs(journalQuery);
+        const unsubJournals = onSnapshot(journalQ, snap => {
+            const list: Journal[] = snap.docs.map(d => ({
+                id: d.id,
+                ...(d.data() as Omit<Journal, "id">),
+            }));
 
-        const journalData: Journal[] = journalSnap.docs.map(doc => ({
-            id: doc.id,
-            ...(doc.data() as Omit<Journal, "id">),
-        }));
-
-        setJournals(journalData);
-        setActivePatients(new Set(journalData.map(j => j.userId)).size);
+            setJournals(list);
+            setActivePatients(new Set(list.map(j => j.userId)).size);
+        });
 
         /* =======================
-           SESSIONS
+           ACCEPTED SESSIONS ONLY
         ======================= */
 
-        const sessionQuery = query(
+        const sessionQ = query(
             collection(db, "sessions"),
-            where("therapistId", "==", THERAPIST_ID),
+            where("therapistId", "==", user.uid),
             where("status", "==", "accepted"),
             orderBy("date", "asc")
         );
 
-        const sessionSnap = await getDocs(sessionQuery);
+        const { start, end } = getCurrentWeekRange();
+        const today = startOfDay(new Date());
 
-        const sessions: Session[] = sessionSnap.docs.map(doc => ({
-            id: doc.id,
-            ...(doc.data() as Omit<Session, "id">),
-        }));
+        const unsubSessions = onSnapshot(sessionQ, snap => {
+            const sessions: Session[] = snap.docs.map(d => ({
+                id: d.id,
+                ...(d.data() as Omit<Session, "id">),
+            }));
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+            /* ---------- UPCOMING (TODAY → FUTURE) ---------- */
+            setUpcomingSessions(
+                sessions.filter(s => s.date.toDate() >= today)
+            );
 
-        setUpcomingSessions(
-            sessions.filter(s => s.date && s.date.toDate() >= today)
-        );
-
-        const { start, end } = getWeekRange();
-
-        setSessionsThisWeek(
-            sessions.filter(s => {
-                if (!s.date) return false;
+            /* ---------- THIS WEEK (MON → SUN ONLY) ---------- */
+            const countThisWeek = sessions.filter(s => {
                 const d = s.date.toDate();
                 return d >= start && d <= end;
-            }).length
-        );
-    };
+            }).length;
+
+            setSessionsThisWeek(countThisWeek);
+        });
+
+        return () => {
+            unsubJournals();
+            unsubSessions();
+        };
+    }, [user]);
 
     return (
         <ScrollView contentContainerStyle={styles.scroll}>
@@ -147,12 +152,28 @@ export default function Dashboard() {
 
             {/* METRICS */}
             <View style={styles.row}>
-                <Metric icon="👥" label="Active Patients" value={activePatients} color="#7C3AED" />
-                <Metric icon="🗓️" label="Sessions This Week" value={sessionsThisWeek} color="#059669" />
+                <Metric
+                    icon="👥"
+                    label="Active Patients"
+                    value={activePatients}
+                    color="#7C3AED"
+                />
+                <Metric
+                    icon="🗓️"
+                    label="Sessions This Week"
+                    value={sessionsThisWeek}
+                    color="#059669"
+                />
             </View>
 
             {/* UPCOMING SESSIONS */}
             <Text style={styles.sectionTitle}>Upcoming Sessions</Text>
+            {upcomingSessions.length === 0 && (
+                <Text style={{ color: "#6B7280" }}>
+                    No upcoming sessions
+                </Text>
+            )}
+
             {upcomingSessions.map(s => (
                 <View key={s.id} style={styles.sessionCard}>
                     <Text style={styles.sessionTitle}>
@@ -188,7 +209,9 @@ export default function Dashboard() {
                             .map(t => t.trim())
                             .filter(Boolean)
                             .map(tag => (
-                                <Text key={tag} style={styles.tag}>{tag}</Text>
+                                <Text key={tag} style={styles.tag}>
+                                    {tag}
+                                </Text>
                             ))}
                     </View>
                 </View>
@@ -198,7 +221,7 @@ export default function Dashboard() {
 }
 
 /* =======================
-   SUBCOMPONENTS
+   METRIC
 ======================= */
 
 const Metric = ({
