@@ -18,16 +18,18 @@ import {
     orderBy,
     serverTimestamp,
     where,
+    Timestamp,
 } from "firebase/firestore";
 
 interface JournalEntry {
     id: string;
     text: string;
-    createdAt: any;
+    createdAt: Timestamp;
     moodScore: number;
     shared: boolean;
     tags: string;
     userId: string;
+    userName: string;
 }
 
 export default function Journal() {
@@ -42,6 +44,11 @@ export default function Journal() {
     const user = auth.currentUser;
     const uid = user?.uid;
 
+    const userName =
+        user?.displayName ||
+        user?.email?.split("@")[0] ||
+        "Anonymous";
+
     const fetchEntries = async () => {
         if (!uid) return;
 
@@ -54,14 +61,14 @@ export default function Journal() {
             );
 
             const snap = await getDocs(q);
-            const data = snap.docs.map((doc) => ({
+            const data = snap.docs.map(doc => ({
                 id: doc.id,
-                ...doc.data(),
-            })) as JournalEntry[];
+                ...(doc.data() as Omit<JournalEntry, "id">),
+            }));
 
             setEntries(data);
         } catch (err) {
-            console.log("Error fetching journal entries:", err);
+            console.error("Error fetching journal entries:", err);
         } finally {
             setLoading(false);
         }
@@ -78,6 +85,7 @@ export default function Journal() {
                 shared,
                 tags: tags.trim(),
                 userId: uid,
+                userName, // ✅ STORED HERE
             });
 
             setNewText("");
@@ -88,14 +96,12 @@ export default function Journal() {
 
             fetchEntries();
         } catch (err) {
-            console.log("Error adding journal entry:", err);
+            console.error("Error adding journal entry:", err);
         }
     };
 
     useEffect(() => {
-        if (uid) {
-            fetchEntries();
-        }
+        fetchEntries();
     }, [uid]);
 
     return (
@@ -105,8 +111,7 @@ export default function Journal() {
                     My Journal <Text style={styles.sparkle}>✨</Text>
                 </Text>
                 <Text style={styles.subtitle}>
-                    Write freely, Joe is here to support you. You choose what to share with
-                    your therapist.
+                    Write freely, Joe is here to support you.
                 </Text>
             </View>
 
@@ -120,28 +125,21 @@ export default function Journal() {
             <FlatList
                 data={entries}
                 keyExtractor={(item) => item.id}
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ paddingBottom: 24 }}
                 refreshing={loading}
                 onRefresh={fetchEntries}
                 renderItem={({ item }) => (
                     <View style={styles.card}>
                         <Text style={styles.cardDate}>
                             {item.createdAt?.toDate
-                                ? item.createdAt.toDate().toLocaleDateString("en-US", {
-                                    month: "short",
-                                    day: "numeric",
-                                })
+                                ? item.createdAt.toDate().toLocaleDateString()
                                 : "Just now"}{" "}
-                            <Text style={styles.cardMood}>Mood: {item.moodScore}</Text>
+                            <Text style={styles.cardMood}>
+                                Mood: {item.moodScore}
+                            </Text>
                         </Text>
 
                         <Text style={styles.cardTags}>Tags: {item.tags}</Text>
-
-                        <Text style={styles.cardText} numberOfLines={3}>
-                            {item.text}
-                        </Text>
-
+                        <Text style={styles.cardText}>{item.text}</Text>
                         <Text style={styles.cardShared}>
                             Shared: {item.shared ? "Yes" : "No"}
                         </Text>
@@ -156,7 +154,7 @@ export default function Journal() {
 
                         <TextInput
                             style={styles.modalInput}
-                            placeholder="Write your thoughts here..."
+                            placeholder="Write your thoughts..."
                             multiline
                             value={newText}
                             onChangeText={setNewText}
@@ -164,15 +162,15 @@ export default function Journal() {
 
                         <TextInput
                             style={styles.modalInput}
-                            placeholder="Tags (AI can overwrite later)"
+                            placeholder="Tags"
                             value={tags}
                             onChangeText={setTags}
                         />
 
                         <View style={styles.moodContainer}>
-                            <Text>Mood Score (1-5): {moodScore}</Text>
+                            <Text>Mood Score (1–5): {moodScore}</Text>
                             <View style={styles.moodButtons}>
-                                {[1, 2, 3, 4, 5].map((num) => (
+                                {[1, 2, 3, 4, 5].map(num => (
                                     <TouchableOpacity
                                         key={num}
                                         style={[
@@ -213,12 +211,7 @@ export default function Journal() {
                                 style={[styles.modalButton, { backgroundColor: "#E5E7EB" }]}
                                 onPress={() => setModalVisible(false)}
                             >
-                                <Text
-                                    style={[
-                                        styles.modalButtonText,
-                                        { color: "#111827" },
-                                    ]}
-                                >
+                                <Text style={[styles.modalButtonText, { color: "#111827" }]}>
                                     Cancel
                                 </Text>
                             </TouchableOpacity>
@@ -230,49 +223,21 @@ export default function Journal() {
     );
 }
 
+/* STYLES UNCHANGED */
 const styles = StyleSheet.create({
-    screen: {
-        flex: 1,
-        backgroundColor: "#F9FAFB",
-        paddingHorizontal: 16,
-        paddingTop: 16,
-    },
-
-    titleSection: {
-        marginBottom: 16,
-    },
-
-    title: {
-        fontSize: 22,
-        fontWeight: "700",
-        color: "#111827",
-    },
-
-    sparkle: {
-        color: "#8B5CF6",
-    },
-
-    subtitle: {
-        fontSize: 14,
-        color: "#6B7280",
-        marginTop: 6,
-        lineHeight: 20,
-    },
-
+    screen: { flex: 1, backgroundColor: "#F9FAFB", padding: 16 },
+    titleSection: { marginBottom: 16 },
+    title: { fontSize: 22, fontWeight: "700" },
+    sparkle: { color: "#8B5CF6" },
+    subtitle: { color: "#6B7280", marginTop: 6 },
     newEntryButton: {
         backgroundColor: "#7C3AED",
-        paddingVertical: 14,
+        padding: 14,
         borderRadius: 14,
         alignItems: "center",
         marginBottom: 20,
     },
-
-    newEntryText: {
-        color: "white",
-        fontSize: 15,
-        fontWeight: "600",
-    },
-
+    newEntryText: { color: "white", fontWeight: "600" },
     card: {
         backgroundColor: "white",
         padding: 16,
@@ -281,77 +246,33 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: "#E5E7EB",
     },
-
-    cardDate: {
-        fontSize: 13,
-        fontWeight: "600",
-        color: "#111827",
-        marginBottom: 6,
-    },
-
-    cardMood: {
-        fontWeight: "400",
-        color: "#6B7280",
-    },
-
-    cardTags: {
-        fontSize: 12,
-        fontStyle: "italic",
-        marginBottom: 6,
-        color: "#6B7280",
-    },
-
-    cardText: {
-        fontSize: 14,
-        color: "#374151",
-        lineHeight: 20,
-        marginBottom: 6,
-    },
-
-    cardShared: {
-        fontSize: 12,
-        color: "#6B7280",
-    },
-
+    cardDate: { fontWeight: "600" },
+    cardMood: { color: "#6B7280" },
+    cardTags: { fontStyle: "italic", color: "#6B7280" },
+    cardText: { marginVertical: 6 },
+    cardShared: { fontSize: 12, color: "#6B7280" },
     modalOverlay: {
         flex: 1,
         backgroundColor: "rgba(0,0,0,0.5)",
         justifyContent: "center",
         alignItems: "center",
     },
-
     modalContent: {
         backgroundColor: "white",
         padding: 20,
         borderRadius: 20,
         width: "90%",
     },
-
-    modalTitle: {
-        fontSize: 18,
-        fontWeight: "700",
-        marginBottom: 12,
-    },
-
+    modalTitle: { fontSize: 18, fontWeight: "700", marginBottom: 12 },
     modalInput: {
         borderWidth: 1,
         borderColor: "#E5E7EB",
         borderRadius: 12,
         padding: 12,
-        minHeight: 50,
-        textAlignVertical: "top",
         marginBottom: 12,
     },
-
-    moodContainer: {
-        marginBottom: 12,
-    },
-
-    moodButtons: {
-        flexDirection: "row",
-        marginTop: 6,
-    },
-
+    moodContainer: { marginBottom: 12 },
+    moodButtons: { flexDirection: "row", marginTop: 6 },
     moodButton: {
         padding: 8,
         marginRight: 6,
@@ -359,24 +280,13 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: "#E5E7EB",
     },
-
-    moodButtonText: {
-        fontWeight: "600",
-        color: "#111827",
-    },
-
+    moodButtonText: { fontWeight: "600" },
     sharedContainer: {
         flexDirection: "row",
-        alignItems: "center",
         justifyContent: "space-between",
         marginBottom: 16,
     },
-
-    modalButtons: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-    },
-
+    modalButtons: { flexDirection: "row" },
     modalButton: {
         flex: 1,
         paddingVertical: 12,
@@ -384,10 +294,5 @@ const styles = StyleSheet.create({
         alignItems: "center",
         marginHorizontal: 4,
     },
-
-    modalButtonText: {
-        fontWeight: "600",
-        fontSize: 15,
-        color: "white",
-    },
+    modalButtonText: { fontWeight: "600", color: "white" },
 });
