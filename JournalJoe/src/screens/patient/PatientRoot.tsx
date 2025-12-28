@@ -6,7 +6,7 @@ import {
     Calendar,
     User,
     LogOut,
-    MessageCircle,
+
 } from "lucide-react-native";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -18,10 +18,9 @@ import Journal from "./Journal";
 import Insights from "./Insights";
 import Sessions from "./Sessions";
 import Profile from "./Profile";
-import ChatWithJoe from "./ChatWithJoe";
 import { RootStackParamList } from "../../../App";
 
-type ViewName = "journal" | "chat" | "insights" | "sessions" | "profile";
+type ViewName = "journal" |  "insights" | "sessions" | "profile";
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
 export default function PatientRoot() {
@@ -54,8 +53,6 @@ export default function PatientRoot() {
         switch (activeView) {
             case "journal":
                 return <Journal />;
-            case "chat":
-                return <ChatWithJoe />;
             case "insights":
                 return <Insights />;
             case "sessions":
@@ -86,7 +83,6 @@ export default function PatientRoot() {
             {/* Bottom Nav */}
             <View style={styles.bottomNav}>
                 <NavItem label="Journal" icon={<BookOpen size={20} />} active={activeView === "journal"} onPress={() => setActiveView("journal")} />
-                <NavItem label="Chat Joe" icon={<MessageCircle size={20} />} active={activeView === "chat"} onPress={() => setActiveView("chat")} />
                 <NavItem label="Insights" icon={<TrendingUp size={20} />} active={activeView === "insights"} onPress={() => setActiveView("insights")} />
                 <NavItem label="Sessions" icon={<Calendar size={20} />} active={activeView === "sessions"} onPress={() => setActiveView("sessions")} />
                 <NavItem label="Profile" icon={<User size={20} />} active={activeView === "profile"} onPress={() => setActiveView("profile")} />

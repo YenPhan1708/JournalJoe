@@ -98,7 +98,7 @@ export default function Insights() {
                 const res = await fetch("http://172.20.10.2:3000/api/joe-tips", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ journals }), // <-- send full journal objects
+                    body: JSON.stringify({ journals }), // send full journal objects
                 });
 
                 const data = await res.json();
@@ -114,6 +114,7 @@ export default function Insights() {
 
     if (loading) return <Text style={{ padding: 16 }}>Loading...</Text>;
 
+    // Calculate mood chart data
     const moodByDate: Record<string, { total: number; count: number }> = {};
     journals.forEach(j => {
         if (!j.moodScore) return;
@@ -131,6 +132,7 @@ export default function Insights() {
 
     const displayedMoodData = moodData.slice(-30);
 
+    // Extract Joe tips
     const lines = joeTipsText.split("\n").map(l => l.trim());
     const extractTips = (sectionTitle: string) => {
         const startIndex = lines.findIndex(l => l.includes(sectionTitle));
@@ -149,12 +151,23 @@ export default function Insights() {
     const anxietyTips = extractTips("For Anxiety Moments");
     const stressTips = extractTips("For Stress Management");
 
+    // Count tags
     const tagCount = journals
         .flatMap(j => j.tags)
         .reduce<Record<string, number>>((acc, tag) => {
             acc[tag] = (acc[tag] || 0) + 1;
             return acc;
         }, {});
+
+    // Correct calculation for Last 7 Days and Shared
+    const today = new Date();
+    const last7DaysCount = journals.filter(j => {
+        const entryDate = new Date(j.date);
+        const diffDays = (today.getTime() - entryDate.getTime()) / (1000 * 60 * 60 * 24);
+        return diffDays >= 0 && diffDays < 7;
+    }).length;
+
+    const sharedCount = journals.filter(j => j.shared).length;
 
     return (
         <ScrollView
@@ -169,8 +182,8 @@ export default function Insights() {
 
             <View style={styles.stats}>
                 <StatCard icon="journal-outline" value={journals.length} label="Total Entries" />
-                <StatCard icon="calendar-outline" value="7" label="Last 7 Days" />
-                <StatCard icon="share-social-outline" value={journals.filter(j => j.shared).length} label="Shared" />
+                <StatCard icon="calendar-outline" value={last7DaysCount} label="Last 7 Days" />
+                <StatCard icon="share-social-outline" value={sharedCount} label="Shared" />
             </View>
 
             <MoodChart data={displayedMoodData} />
