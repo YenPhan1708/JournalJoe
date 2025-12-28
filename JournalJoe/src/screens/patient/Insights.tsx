@@ -7,7 +7,6 @@ import {
     Pressable,
     Animated,
 } from "react-native";
-import Ionicons from "react-native-vector-icons/Ionicons";
 import { collection, getDocs, query, orderBy } from "firebase/firestore";
 import { db } from "../../services/firebase";
 import CoachCard from "../../components/CoachCard";
@@ -20,10 +19,10 @@ interface JournalEntry {
     date: string;
     moodScore: number;
     tags: string[];
+    text: string;
     shared?: boolean;
 }
 
-/* ---------------- Animated Tag ---------------- */
 interface AnimatedTagProps {
     label: string;
 }
@@ -55,16 +54,18 @@ const AnimatedTag: React.FC<AnimatedTagProps> = ({ label }) => {
     );
 };
 
-/* ---------------- Main Screen ---------------- */
 export default function Insights() {
     const [journals, setJournals] = useState<JournalEntry[]>([]);
     const [loading, setLoading] = useState(true);
+    const [joeTipsText, setJoeTipsText] = useState<string>("");
 
+    // Fetch journals from Firestore
     useEffect(() => {
         const fetchJournals = async () => {
             try {
                 const q = query(collection(db, "journals"), orderBy("createdAt", "desc"));
                 const snapshot = await getDocs(q);
+
                 const fetchedJournals: JournalEntry[] = snapshot.docs.map(doc => {
                     const data = doc.data();
                     return {
@@ -72,9 +73,11 @@ export default function Insights() {
                         date: data.createdAt?.toDate().toISOString().split("T")[0] || "",
                         moodScore: data.moodScore,
                         tags: Array.isArray(data.tags) ? data.tags : [data.tags],
+                        text: data.text || "",
                         shared: data.shared || false,
                     };
                 });
+
                 setJournals(fetchedJournals);
             } catch (err) {
                 console.error("Error fetching journals:", err);
@@ -86,9 +89,31 @@ export default function Insights() {
         fetchJournals();
     }, []);
 
+    // Fetch Joe Tips based on raw journal entries
+    useEffect(() => {
+        if (journals.length === 0) return;
+
+        const fetchJoeTips = async () => {
+            try {
+                const res = await fetch("http://172.20.10.2:3000/api/joe-tips", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ journals }), // <-- send full journal objects
+                });
+
+                const data = await res.json();
+                setJoeTipsText(data.tipsText || "");
+            } catch (err) {
+                console.error("Failed to fetch Joe tips:", err);
+                setJoeTipsText("");
+            }
+        };
+
+        fetchJoeTips();
+    }, [journals]);
+
     if (loading) return <Text style={{ padding: 16 }}>Loading...</Text>;
 
-    /* ------------------ Average Mood Per Day ------------------ */
     const moodByDate: Record<string, { total: number; count: number }> = {};
     journals.forEach(j => {
         if (!j.moodScore) return;
@@ -100,25 +125,43 @@ export default function Insights() {
     const moodData = Object.entries(moodByDate)
         .sort(([a], [b]) => new Date(a).getTime() - new Date(b).getTime())
         .map(([date, { total, count }]) => ({
-            label: new Date(date).toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-            }),
+            label: new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
             entries: total / count,
         }));
 
-    /* Limit displayed days to 30 for cleaner chart */
     const displayedMoodData = moodData.slice(-30);
 
-    /* ------------------ Tag Count ------------------ */
-    const processedTags = journals.flatMap(j => j.tags);
-    const tagCount = processedTags.reduce<Record<string, number>>((acc, tag) => {
-        acc[tag] = (acc[tag] || 0) + 1;
-        return acc;
-    }, {});
+    const lines = joeTipsText.split("\n").map(l => l.trim());
+    const extractTips = (sectionTitle: string) => {
+        const startIndex = lines.findIndex(l => l.includes(sectionTitle));
+        if (startIndex === -1) return [];
+
+        const tips: string[] = [];
+        for (let i = startIndex + 1; i < lines.length; i++) {
+            const line = lines[i];
+            if (line.includes("For ") && line.includes(":")) break;
+            if (line.startsWith("• ") && line !== "• —") tips.push(line.slice(2));
+            if (tips.length === 4) break;
+        }
+        return tips;
+    };
+
+    const anxietyTips = extractTips("For Anxiety Moments");
+    const stressTips = extractTips("For Stress Management");
+
+    const tagCount = journals
+        .flatMap(j => j.tags)
+        .reduce<Record<string, number>>((acc, tag) => {
+            acc[tag] = (acc[tag] || 0) + 1;
+            return acc;
+        }, {});
 
     return (
-        <ScrollView style={{ backgroundColor: COLORS.bg }} contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+        <ScrollView
+            style={{ backgroundColor: COLORS.bg }}
+            contentContainerStyle={styles.container}
+            showsVerticalScrollIndicator={false}
+        >
             <Text style={styles.header}>Your Insights 📊</Text>
             <Text style={styles.subHeader}>Here’s what I’ve noticed about your journey</Text>
 
@@ -130,10 +173,8 @@ export default function Insights() {
                 <StatCard icon="share-social-outline" value={journals.filter(j => j.shared).length} label="Shared" />
             </View>
 
-            {/* 📈 Mood Chart */}
             <MoodChart data={displayedMoodData} />
 
-            {/* 🧠 Tags */}
             <View style={styles.card}>
                 <Text style={styles.cardTitle}>What you’ve been processing 🧠</Text>
                 <View style={styles.tagsWrap}>
@@ -143,38 +184,32 @@ export default function Insights() {
                 </View>
             </View>
 
-            {/* 💜 Joe’s Tips */}
             <View style={styles.card}>
                 <Text style={styles.cardTitle}>Joe’s Tips for You 💜</Text>
+                {!joeTipsText ? (
+                    <Text style={styles.tipText}>Loading tips...</Text>
+                ) : (
+                    <>
+                        <View style={styles.tipBox}>
+                            <Text style={styles.tipTitle}>🌿 For Anxiety Moments:</Text>
+                            {anxietyTips.map((tip, i) => (
+                                <Text key={i} style={styles.tipText}>• {tip}</Text>
+                            ))}
+                        </View>
 
-                <View style={styles.tipBox}>
-                    <Ionicons name="heart-outline" size={18} color={COLORS.primary} />
-                    <Text style={styles.tipTitle}>For Anxiety Moments</Text>
-                    {["Ground yourself using 5-4-3-2-1", "Slow breathing for 5 minutes", "Name what you’re feeling", "Check in with your body"].map(tip => (
-                        <Text key={tip} style={styles.tipText}>• {tip}</Text>
-                    ))}
-                </View>
-
-                <View style={styles.tipBox}>
-                    <Ionicons name="fitness-outline" size={18} color={COLORS.primary} />
-                    <Text style={styles.tipTitle}>For Stress Management</Text>
-                    {["Break tasks into steps", "Take short screen breaks", "Avoid multitasking", "Notice early stress signs"].map(tip => (
-                        <Text key={tip} style={styles.tipText}>• {tip}</Text>
-                    ))}
-                </View>
-
-                <View style={styles.reminderBox}>
-                    <Text style={styles.reminderText}>
-                        Remember: These are friendly suggestions from Joe, not medical advice.
-                        Your therapist is the expert 💙
-                    </Text>
-                </View>
+                        <View style={styles.tipBox}>
+                            <Text style={styles.tipTitle}>🧘 For Stress Management:</Text>
+                            {stressTips.map((tip, i) => (
+                                <Text key={i} style={styles.tipText}>• {tip}</Text>
+                            ))}
+                        </View>
+                    </>
+                )}
             </View>
         </ScrollView>
     );
 }
 
-/* ---------------- Styles ---------------- */
 const styles = StyleSheet.create({
     container: { padding: 16 },
     header: { fontSize: 22, fontWeight: "700" },
@@ -215,14 +250,6 @@ const styles = StyleSheet.create({
         padding: 12,
         marginBottom: 12,
     },
-    tipTitle: { fontWeight: "600", marginVertical: 6 },
-    tipText: { fontSize: 13, marginLeft: 4 },
-
-    reminderBox: {
-        marginTop: 12,
-        padding: 12,
-        backgroundColor: COLORS.primarySoft,
-        borderRadius: 12,
-    },
-    reminderText: { fontSize: 12, color: COLORS.primary },
+    tipTitle: { fontWeight: "600", marginBottom: 6 },
+    tipText: { fontSize: 13, marginLeft: 4, marginBottom: 4 },
 });
