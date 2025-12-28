@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
     ScrollView,
     View,
@@ -24,7 +24,6 @@ interface JournalEntry {
 }
 
 /* ---------------- Animated Tag ---------------- */
-
 interface AnimatedTagProps {
     label: string;
 }
@@ -35,45 +34,21 @@ const AnimatedTag: React.FC<AnimatedTagProps> = ({ label }) => {
 
     const pressIn = () => {
         Animated.parallel([
-            Animated.timing(scale, {
-                toValue: 0.95,
-                duration: 120,
-                useNativeDriver: true,
-            }),
-            Animated.timing(opacity, {
-                toValue: 0.85,
-                duration: 120,
-                useNativeDriver: true,
-            }),
+            Animated.timing(scale, { toValue: 0.95, duration: 120, useNativeDriver: true }),
+            Animated.timing(opacity, { toValue: 0.85, duration: 120, useNativeDriver: true }),
         ]).start();
     };
 
     const pressOut = () => {
         Animated.parallel([
-            Animated.timing(scale, {
-                toValue: 1,
-                duration: 120,
-                useNativeDriver: true,
-            }),
-            Animated.timing(opacity, {
-                toValue: 1,
-                duration: 120,
-                useNativeDriver: true,
-            }),
+            Animated.timing(scale, { toValue: 1, duration: 120, useNativeDriver: true }),
+            Animated.timing(opacity, { toValue: 1, duration: 120, useNativeDriver: true }),
         ]).start();
     };
 
     return (
         <Pressable onPressIn={pressIn} onPressOut={pressOut}>
-            <Animated.View
-                style={[
-                    styles.tag,
-                    {
-                        transform: [{ scale }],
-                        opacity,
-                    },
-                ]}
-            >
+            <Animated.View style={[styles.tag, { transform: [{ scale }], opacity }]}>
                 <Text style={styles.tagText}>{label}</Text>
             </Animated.View>
         </Pressable>
@@ -81,7 +56,6 @@ const AnimatedTag: React.FC<AnimatedTagProps> = ({ label }) => {
 };
 
 /* ---------------- Main Screen ---------------- */
-
 export default function Insights() {
     const [journals, setJournals] = useState<JournalEntry[]>([]);
     const [loading, setLoading] = useState(true);
@@ -114,14 +88,29 @@ export default function Insights() {
 
     if (loading) return <Text style={{ padding: 16 }}>Loading...</Text>;
 
-    const moodData = journals.map(j => ({
-        label: new Date(j.date).toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-        }),
-        entries: j.moodScore,
-    }));
+    /* ------------------ Average Mood Per Day ------------------ */
+    const moodByDate: Record<string, { total: number; count: number }> = {};
+    journals.forEach(j => {
+        if (!j.moodScore) return;
+        if (!moodByDate[j.date]) moodByDate[j.date] = { total: 0, count: 0 };
+        moodByDate[j.date].total += j.moodScore;
+        moodByDate[j.date].count += 1;
+    });
 
+    const moodData = Object.entries(moodByDate)
+        .sort(([a], [b]) => new Date(a).getTime() - new Date(b).getTime())
+        .map(([date, { total, count }]) => ({
+            label: new Date(date).toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+            }),
+            entries: total / count,
+        }));
+
+    /* Limit displayed days to 30 for cleaner chart */
+    const displayedMoodData = moodData.slice(-30);
+
+    /* ------------------ Tag Count ------------------ */
     const processedTags = journals.flatMap(j => j.tags);
     const tagCount = processedTags.reduce<Record<string, number>>((acc, tag) => {
         acc[tag] = (acc[tag] || 0) + 1;
@@ -129,30 +118,20 @@ export default function Insights() {
     }, {});
 
     return (
-        <ScrollView
-            style={{ backgroundColor: COLORS.bg }}
-            contentContainerStyle={styles.container}
-            showsVerticalScrollIndicator={false}
-        >
+        <ScrollView style={{ backgroundColor: COLORS.bg }} contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
             <Text style={styles.header}>Your Insights 📊</Text>
-            <Text style={styles.subHeader}>
-                Here’s what I’ve noticed about your journey
-            </Text>
+            <Text style={styles.subHeader}>Here’s what I’ve noticed about your journey</Text>
 
             <CoachCard />
 
             <View style={styles.stats}>
                 <StatCard icon="journal-outline" value={journals.length} label="Total Entries" />
                 <StatCard icon="calendar-outline" value="7" label="Last 7 Days" />
-                <StatCard
-                    icon="share-social-outline"
-                    value={journals.filter(j => j.shared).length}
-                    label="Shared"
-                />
+                <StatCard icon="share-social-outline" value={journals.filter(j => j.shared).length} label="Shared" />
             </View>
 
             {/* 📈 Mood Chart */}
-            <MoodChart data={moodData} />
+            <MoodChart data={displayedMoodData} />
 
             {/* 🧠 Tags */}
             <View style={styles.card}>
@@ -171,12 +150,7 @@ export default function Insights() {
                 <View style={styles.tipBox}>
                     <Ionicons name="heart-outline" size={18} color={COLORS.primary} />
                     <Text style={styles.tipTitle}>For Anxiety Moments</Text>
-                    {[
-                        "Ground yourself using 5-4-3-2-1",
-                        "Slow breathing for 5 minutes",
-                        "Name what you’re feeling",
-                        "Check in with your body",
-                    ].map(tip => (
+                    {["Ground yourself using 5-4-3-2-1", "Slow breathing for 5 minutes", "Name what you’re feeling", "Check in with your body"].map(tip => (
                         <Text key={tip} style={styles.tipText}>• {tip}</Text>
                     ))}
                 </View>
@@ -184,12 +158,7 @@ export default function Insights() {
                 <View style={styles.tipBox}>
                     <Ionicons name="fitness-outline" size={18} color={COLORS.primary} />
                     <Text style={styles.tipTitle}>For Stress Management</Text>
-                    {[
-                        "Break tasks into steps",
-                        "Take short screen breaks",
-                        "Avoid multitasking",
-                        "Notice early stress signs",
-                    ].map(tip => (
+                    {["Break tasks into steps", "Take short screen breaks", "Avoid multitasking", "Notice early stress signs"].map(tip => (
                         <Text key={tip} style={styles.tipText}>• {tip}</Text>
                     ))}
                 </View>
@@ -206,7 +175,6 @@ export default function Insights() {
 }
 
 /* ---------------- Styles ---------------- */
-
 const styles = StyleSheet.create({
     container: { padding: 16 },
     header: { fontSize: 22, fontWeight: "700" },

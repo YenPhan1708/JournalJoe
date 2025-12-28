@@ -61,6 +61,10 @@ export default function Journal() {
     const userName =
         user?.displayName || user?.email?.split("@")[0] || "Anonymous";
 
+    /* ------------------------------------------------------------------ */
+    /* Fetch entries                                                       */
+    /* ------------------------------------------------------------------ */
+
     const fetchEntries = async () => {
         if (!uid) return;
 
@@ -85,6 +89,10 @@ export default function Journal() {
             setLoading(false);
         }
     };
+
+    /* ------------------------------------------------------------------ */
+    /* Joe message                                                         */
+    /* ------------------------------------------------------------------ */
 
     const fetchJoeMessage = async () => {
         if (!entries.length) return;
@@ -111,7 +119,15 @@ export default function Journal() {
         }
     };
 
-    const analyzeMoodAsync = async (entryId: string, text: string, selectedTags: string[]) => {
+    /* ------------------------------------------------------------------ */
+    /* Mood analysis (SAFE)                                                */
+    /* ------------------------------------------------------------------ */
+
+    const analyzeMoodAsync = async (
+        entryId: string,
+        text: string,
+        selectedTags: string[]
+    ) => {
         try {
             const response = await fetch(`${API_BASE_URL}/analyze-mood`, {
                 method: "POST",
@@ -119,23 +135,42 @@ export default function Journal() {
                 body: JSON.stringify({ text, tags: selectedTags }),
             });
 
-            const data = await response.json();
+            if (!response.ok) {
+                throw new Error("Mood API failed");
+            }
 
-            // Update Firebase
+            const data = await response.json();
+            const moodScore =
+                typeof data?.moodScore === "number" ? data.moodScore : 3;
+
             await updateDoc(doc(db, "journals", entryId), {
-                moodScore: data.moodScore,
+                moodScore,
             });
 
-            // Update local state immediately
             setEntries((prev) =>
                 prev.map((e) =>
-                    e.id === entryId ? { ...e, moodScore: data.moodScore } : e
+                    e.id === entryId ? { ...e, moodScore } : e
                 )
             );
         } catch (err) {
             console.error("Mood analysis failed:", err);
+
+            // Fallback to neutral mood
+            await updateDoc(doc(db, "journals", entryId), {
+                moodScore: 3,
+            });
+
+            setEntries((prev) =>
+                prev.map((e) =>
+                    e.id === entryId ? { ...e, moodScore: 3 } : e
+                )
+            );
         }
     };
+
+    /* ------------------------------------------------------------------ */
+    /* Add entry                                                           */
+    /* ------------------------------------------------------------------ */
 
     const handleAddEntry = async () => {
         if (!uid || !newText.trim() || !tags.length) return;
@@ -151,7 +186,6 @@ export default function Journal() {
                 userName,
             });
 
-            // Await the mood analysis to update local state before refetching
             await analyzeMoodAsync(ref.id, newText.trim(), tags);
 
             setNewText("");
@@ -176,12 +210,16 @@ export default function Journal() {
     }, [modalVisible]);
 
     const toggleTag = (label: string) => {
-        if (tags.includes(label)) {
-            setTags(tags.filter((t) => t !== label));
-        } else {
-            setTags([...tags, label]);
-        }
+        setTags((prev) =>
+            prev.includes(label)
+                ? prev.filter((t) => t !== label)
+                : [...prev, label]
+        );
     };
+
+    /* ------------------------------------------------------------------ */
+    /* UI                                                                  */
+    /* ------------------------------------------------------------------ */
 
     return (
         <View style={styles.screen}>
@@ -201,7 +239,9 @@ export default function Journal() {
                     <View style={styles.card}>
                         <Text style={styles.cardDate}>
                             {item.createdAt?.toDate
-                                ? item.createdAt.toDate().toLocaleDateString()
+                                ? item.createdAt
+                                    .toDate()
+                                    .toLocaleDateString()
                                 : "Just now"}
                         </Text>
 
@@ -234,14 +274,18 @@ export default function Journal() {
                             onChangeText={setNewText}
                         />
 
-                        <Text style={styles.tagsTitle}>How are you feeling today?</Text>
+                        <Text style={styles.tagsTitle}>
+                            How are you feeling today?
+                        </Text>
+
                         <View style={styles.tagsContainer}>
                             {TAGS.map((t) => (
                                 <TouchableOpacity
                                     key={t.label}
                                     style={[
                                         styles.tagButton,
-                                        tags.includes(t.label) && styles.tagSelected,
+                                        tags.includes(t.label) &&
+                                        styles.tagSelected,
                                     ]}
                                     onPress={() => toggleTag(t.label)}
                                 >
@@ -254,10 +298,7 @@ export default function Journal() {
 
                         <View style={styles.sharedContainer}>
                             <Text>Share with therapist:</Text>
-                            <Switch
-                                value={shared}
-                                onValueChange={setShared}
-                            />
+                            <Switch value={shared} onValueChange={setShared} />
                         </View>
 
                         <View style={styles.modalButtons}>
