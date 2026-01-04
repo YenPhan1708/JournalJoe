@@ -6,7 +6,6 @@ import {
     Calendar,
     User,
     LogOut,
-
 } from "lucide-react-native";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -20,7 +19,7 @@ import Sessions from "./Sessions";
 import Profile from "./Profile";
 import { RootStackParamList } from "../../../App";
 
-type ViewName = "journal" |  "insights" | "sessions" | "profile";
+type ViewName = "journal" | "insights" | "sessions" | "profile";
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
 export default function PatientRoot() {
@@ -30,9 +29,12 @@ export default function PatientRoot() {
 
     const [activeView, setActiveView] = useState<ViewName>("journal");
     const [name, setName] = useState("...");
+    const [patientId, setPatientId] = useState<string | undefined>(undefined);
 
     useEffect(() => {
         if (!user) return;
+
+        setPatientId(user.uid); // Pass current user ID as patientId
 
         const loadUser = async () => {
             const snap = await getDoc(doc(db, "users", user.uid));
@@ -50,13 +52,21 @@ export default function PatientRoot() {
     };
 
     const renderView = () => {
+        if (!patientId) {
+            return (
+                <View style={{ padding: 16 }}>
+                    <Text>Loading patient data…</Text>
+                </View>
+            );
+        }
+
         switch (activeView) {
             case "journal":
                 return <Journal />;
             case "insights":
-                return <Insights />;
+                return <Insights patientId={patientId} />;
             case "sessions":
-                return <Sessions />;
+                return <Sessions  />;
             case "profile":
                 return <Profile navigation={navigation} />;
         }
@@ -82,10 +92,30 @@ export default function PatientRoot() {
 
             {/* Bottom Nav */}
             <View style={styles.bottomNav}>
-                <NavItem label="Journal" icon={<BookOpen size={20} />} active={activeView === "journal"} onPress={() => setActiveView("journal")} />
-                <NavItem label="Insights" icon={<TrendingUp size={20} />} active={activeView === "insights"} onPress={() => setActiveView("insights")} />
-                <NavItem label="Sessions" icon={<Calendar size={20} />} active={activeView === "sessions"} onPress={() => setActiveView("sessions")} />
-                <NavItem label="Profile" icon={<User size={20} />} active={activeView === "profile"} onPress={() => setActiveView("profile")} />
+                <NavItem
+                    label="Journal"
+                    icon={<BookOpen size={20} />}
+                    active={activeView === "journal"}
+                    onPress={() => setActiveView("journal")}
+                />
+                <NavItem
+                    label="Insights"
+                    icon={<TrendingUp size={20} />}
+                    active={activeView === "insights"}
+                    onPress={() => setActiveView("insights")}
+                />
+                <NavItem
+                    label="Sessions"
+                    icon={<Calendar size={20} />}
+                    active={activeView === "sessions"}
+                    onPress={() => setActiveView("sessions")}
+                />
+                <NavItem
+                    label="Profile"
+                    icon={<User size={20} />}
+                    active={activeView === "profile"}
+                    onPress={() => setActiveView("profile")}
+                />
             </View>
         </View>
     );
@@ -113,7 +143,6 @@ function NavItem({
 }
 
 /* ---------------- Styles ---------------- */
-
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: "#F9FAFB" },
 
@@ -129,7 +158,6 @@ const styles = StyleSheet.create({
     headerTitle: { fontSize: 18, fontWeight: "600" },
     headerSubtitle: { fontSize: 13, color: "#6B7280" },
 
-    /* ✅ FIXED */
     iconBtn: {
         padding: 6,
     },
