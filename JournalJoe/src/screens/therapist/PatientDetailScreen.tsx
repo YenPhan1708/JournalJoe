@@ -144,17 +144,17 @@ export default function PatientDetailScreen() {
     }, [patientId]);
 
     /* =======================
-       AI CALLS (PER JOURNAL)
+       AI ANALYSIS
     ======================= */
 
     useEffect(() => {
         if (journals.length === 0) return;
 
-        const journalsToAnalyze = journals.filter(
+        const toAnalyze = journals.filter(
             j => !j.insight || !j.conclusion
         );
 
-        journalsToAnalyze.forEach(async (j) => {
+        toAnalyze.forEach(async j => {
             try {
                 const res = await fetch(
                     "http://172.20.10.2:3000/api/journal-analysis",
@@ -179,11 +179,7 @@ export default function PatientDetailScreen() {
                     )
                 );
             } catch (err) {
-                console.error(
-                    "Error analyzing journal entry:",
-                    j.id,
-                    err
-                );
+                console.error("Journal AI error:", err);
             }
         });
     }, [journals]);
@@ -213,19 +209,46 @@ export default function PatientDetailScreen() {
         [sessions, today]
     );
 
-    const moodChartData = useMemo(
-        () =>
-            journals.map(j => ({
-                label: j.createdAt
-                    .toDate()
-                    .toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                    }),
-                entries: j.moodScore,
-            })),
-        [journals]
-    );
+    /* =======================
+       MOOD TREND (DAILY AVG)
+    ======================= */
+
+    const moodChartData = useMemo(() => {
+        const grouped: Record<
+            string,
+            { total: number; count: number }
+        > = {};
+
+        journals.forEach(j => {
+            const dateKey = j.createdAt
+                .toDate()
+                .toISOString()
+                .split("T")[0]; // YYYY-MM-DD
+
+            if (!grouped[dateKey]) {
+                grouped[dateKey] = { total: 0, count: 0 };
+            }
+
+            grouped[dateKey].total += j.moodScore;
+            grouped[dateKey].count += 1;
+        });
+
+        return Object.entries(grouped)
+            .map(([date, value]) => ({
+                label: new Date(date).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                }),
+                entries: Number(
+                    (value.total / value.count).toFixed(1)
+                ),
+            }))
+            .sort(
+                (a, b) =>
+                    new Date(a.label).getTime() -
+                    new Date(b.label).getTime()
+            );
+    }, [journals]);
 
     if (!patient) return null;
 
@@ -239,7 +262,9 @@ export default function PatientDetailScreen() {
                 <Text style={styles.back}>← Back</Text>
             </TouchableOpacity>
 
-            <Text style={styles.title}>{patient.name.toUpperCase()}</Text>
+            <Text style={styles.title}>
+                {patient.name.toUpperCase()}
+            </Text>
             <Text style={styles.subtitle}>{patient.email}</Text>
 
             <Text style={styles.section}>📅 Upcoming Sessions</Text>
@@ -247,19 +272,23 @@ export default function PatientDetailScreen() {
                 <Text style={styles.empty}>No upcoming sessions</Text>
             ) : (
                 upcomingSessions.map(s => (
-                    <View key={s.id} style={styles.sessionCardUpcoming}>
+                    <View
+                        key={s.id}
+                        style={styles.sessionCardUpcoming}
+                    >
                         <Text>
                             {s.date.toDate().toLocaleString()} •{" "}
                             {s.duration} min
                         </Text>
-                        <Text style={getSessionStatusStyle(s.status)}>
+                        <Text
+                            style={getSessionStatusStyle(s.status)}
+                        >
                             {s.status.toUpperCase()}
                         </Text>
                     </View>
                 ))
             )}
 
-            <Text style={styles.section}>Mood Trend</Text>
             {moodChartData.length < 2 ? (
                 <Text style={styles.empty}>
                     Not enough data to show mood trend.
@@ -268,7 +297,9 @@ export default function PatientDetailScreen() {
                 <MoodChart data={moodChartData} />
             )}
 
-            <Text style={styles.section}>Recent Journal Entries</Text>
+            <Text style={styles.section}>
+                📝 Recent Journal Entries
+            </Text>
 
             {journals.map(j => (
                 <View key={j.id} style={styles.entryCard}>
@@ -283,9 +314,13 @@ export default function PatientDetailScreen() {
                         <Text style={styles.aiTitle}>AI Insight</Text>
 
                         {j.insight ? (
-                            <Text style={styles.aiText}>{j.insight}</Text>
+                            <Text style={styles.aiText}>
+                                {j.insight}
+                            </Text>
                         ) : (
-                            <Text style={styles.aiText}>Analyzing...</Text>
+                            <Text style={styles.aiText}>
+                                Analyzing...
+                            </Text>
                         )}
 
                         {j.conclusion && (
@@ -307,14 +342,19 @@ export default function PatientDetailScreen() {
                 <Text style={styles.empty}>No past sessions</Text>
             ) : (
                 pastSessions.map(s => (
-                    <View key={s.id} style={styles.sessionCardPast}>
+                    <View
+                        key={s.id}
+                        style={styles.sessionCardPast}
+                    >
                         <Text>
                             {s.date
                                 .toDate()
                                 .toLocaleDateString()}{" "}
                             • {s.duration} min
                         </Text>
-                        <Text style={getSessionStatusStyle(s.status)}>
+                        <Text
+                            style={getSessionStatusStyle(s.status)}
+                        >
                             {s.status.toUpperCase()}
                         </Text>
                     </View>
@@ -331,10 +371,15 @@ export default function PatientDetailScreen() {
 const styles = StyleSheet.create({
     scroll: { padding: 16, backgroundColor: "#FFFFFF" },
     back: { fontWeight: "600", marginBottom: 8 },
+
     title: { fontSize: 24, fontWeight: "700" },
     subtitle: { color: "#6B7280", marginBottom: 16 },
 
-    section: { fontSize: 16, fontWeight: "700", marginVertical: 12 },
+    section: {
+        fontSize: 16,
+        fontWeight: "700",
+        marginVertical: 12,
+    },
     empty: { color: "#6B7280", fontSize: 12 },
 
     sessionCardUpcoming: {

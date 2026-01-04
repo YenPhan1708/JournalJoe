@@ -16,6 +16,7 @@ import {
     where,
     orderBy,
     Timestamp,
+    limit,
 } from "firebase/firestore";
 import { db } from "../../services/firebase";
 import { RootStackParamList } from "../../../App";
@@ -53,6 +54,11 @@ export default function PatientsScreen() {
     const [patients, setPatients] = useState<Patient[]>([]);
     const [sessions, setSessions] = useState<Session[]>([]);
     const [search, setSearch] = useState("");
+
+    // ✅ cache AI results per patient
+    const [moodTrends, setMoodTrends] = useState<
+        Record<string, string>
+    >({});
 
     /* =======================
        FETCH PATIENTS
@@ -126,9 +132,62 @@ export default function PatientsScreen() {
             : "—";
     };
 
-    const getMoodTrendLabel = () => {
-        // Placeholder logic (future AI-based)
-        return "Stable";
+    /* =======================
+       AI MOOD TREND
+    ======================= */
+
+    const getMoodTrendLabel = (patientId: string) => {
+        if (moodTrends[patientId]) {
+            return moodTrends[patientId];
+        }
+
+        const q = query(
+            collection(db, "journals"),
+            where("userId", "==", patientId),
+            orderBy("createdAt", "desc"),
+            limit(7)
+        );
+
+        onSnapshot(q, async snap => {
+            const scores = snap.docs
+                .map(d => d.data().moodScore)
+                .filter((s: any) => typeof s === "number");
+
+            if (scores.length < 3) {
+                setMoodTrends(prev => ({
+                    ...prev,
+                    [patientId]: "Stable",
+                }));
+                return;
+            }
+
+            try {
+                const res = await fetch(
+                    "http://172.20.10.2:3000/api/mood-trend",
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({ scores: scores.reverse() }),
+                    }
+                );
+
+                const data = await res.json();
+
+                setMoodTrends(prev => ({
+                    ...prev,
+                    [patientId]: data.label ?? "Stable",
+                }));
+            } catch {
+                setMoodTrends(prev => ({
+                    ...prev,
+                    [patientId]: "Stable",
+                }));
+            }
+        });
+
+        return "—";
     };
 
     const filteredPatients = patients.filter(p =>
@@ -205,7 +264,7 @@ export default function PatientsScreen() {
                                     Mood Trend
                                 </Text>
                                 <Text style={styles.metaValue}>
-                                    — {getMoodTrendLabel()}
+                                    — {getMoodTrendLabel(item.id)}
                                 </Text>
                             </View>
 

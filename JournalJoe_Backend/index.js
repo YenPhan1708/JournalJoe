@@ -220,11 +220,50 @@ ${text}
     }
 });
 
+// ================= MOOD TREND (AI) =================
+app.post("/api/mood-trend", async (req, res) => {
+    try {
+        const { scores } = req.body;
+
+        if (!scores || scores.length < 3) {
+            return res.json({ label: "Stable" });
+        }
+
+        const prompt = `
+You are a clinical assistant.
+Based on the following mood scores over time (earliest → latest),
+classify the overall trend as ONE of:
+Improving, Stable, Declining.
+
+Scores:
+${scores.join(", ")}
+
+Respond with ONLY the label.
+`;
+
+        const completion = await openai.chat.completions.create({
+            model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+            messages: [{ role: "user", content: prompt }],
+            temperature: 0,
+        });
+
+        const label =
+            completion.choices[0].message.content.trim();
+
+        res.json({ label });
+    } catch (err) {
+        console.error("Error in /api/mood-trend:", err);
+        res.status(500).json({ label: "Stable" });
+    }
+});
+
+
 // ================= UNMATCHED ROUTES =================
 app.use((req, res) => {
     console.warn(`[WARN] No route matched: ${req.method} ${req.url}`);
     res.status(404).json({ error: "Route not found" });
 });
+
 
 // ================= START SERVER =================
 app.listen(PORT, "0.0.0.0", () => {
