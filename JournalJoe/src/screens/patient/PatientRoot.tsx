@@ -64,7 +64,7 @@ export default function PatientRoot() {
             case "journal":
                 return <Journal />;
             case "insights":
-                return <Insights patientId={patientId} />;
+                return <Insights />;
             case "sessions":
                 return <Sessions  />;
             case "profile":
