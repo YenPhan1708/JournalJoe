@@ -8,6 +8,7 @@ import {
     TextInput,
     Modal,
     Switch,
+    ActivityIndicator,
 } from "react-native";
 import { auth, db } from "../../services/firebase";
 import {
@@ -16,38 +17,53 @@ import {
     getDocs,
     query,
     orderBy,
-    serverTimestamp,
     where,
+    serverTimestamp,
     Timestamp,
+    updateDoc,
+    doc,
 } from "firebase/firestore";
 
 interface JournalEntry {
     id: string;
     text: string;
     createdAt: Timestamp;
-    moodScore: number;
+    moodScore: number | null;
     shared: boolean;
     tags: string;
     userId: string;
     userName: string;
 }
 
+const API_BASE_URL = "http://172.20.10.2:3000/api";
+
+const TAGS = [
+    { label: "Happy", icon: "😄" },
+    { label: "Sad", icon: "😢" },
+    { label: "Anxious", icon: "😰" },
+    { label: "Excited", icon: "🤩" },
+    { label: "Tired", icon: "😴" },
+];
+
 export default function Journal() {
     const [entries, setEntries] = useState<JournalEntry[]>([]);
     const [modalVisible, setModalVisible] = useState(false);
     const [newText, setNewText] = useState("");
-    const [moodScore, setMoodScore] = useState(3);
     const [shared, setShared] = useState(false);
-    const [tags, setTags] = useState("");
+    const [tags, setTags] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
+
+    const [joeMessage, setJoeMessage] = useState<string>("");
+    const [joeLoading, setJoeLoading] = useState(false);
 
     const user = auth.currentUser;
     const uid = user?.uid;
-
     const userName =
-        user?.displayName ||
-        user?.email?.split("@")[0] ||
-        "Anonymous";
+        user?.displayName || user?.email?.split("@")[0] || "Anonymous";
+
+    /* ------------------------------------------------------------------ */
+    /* Fetch entries                                                       */
+    /* ------------------------------------------------------------------ */
 
     const fetchEntries = async () => {
         if (!uid) return;
@@ -61,42 +77,125 @@ export default function Journal() {
             );
 
             const snap = await getDocs(q);
-            const data = snap.docs.map(doc => ({
-                id: doc.id,
-                ...(doc.data() as Omit<JournalEntry, "id">),
+            const data = snap.docs.map((d) => ({
+                id: d.id,
+                ...(d.data() as Omit<JournalEntry, "id">),
             }));
 
             setEntries(data);
         } catch (err) {
-            console.error("Error fetching journal entries:", err);
+            console.error("Fetch journals error:", err);
         } finally {
             setLoading(false);
         }
     };
 
-    const handleAddEntry = async () => {
-        if (!uid || !newText.trim()) return;
+    /* ------------------------------------------------------------------ */
+    /* Joe message                                                         */
+    /* ------------------------------------------------------------------ */
 
+    const fetchJoeMessage = async () => {
+        if (!entries.length) return;
+
+        setJoeLoading(true);
         try {
-            await addDoc(collection(db, "journals"), {
-                text: newText.trim(),
-                createdAt: serverTimestamp(),
-                moodScore,
-                shared,
-                tags: tags.trim(),
-                userId: uid,
-                userName, // ✅ STORED HERE
+            const response = await fetch(`${API_BASE_URL}/joe-message`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    previousEntries: entries.slice(0, 5).map((e) => e.text),
+                }),
             });
 
+            const data = await response.json();
+            setJoeMessage(data.message);
+        } catch (err) {
+            console.error("Joe message error:", err);
+            setJoeMessage(
+                "I’m here with you. Take your time and write honestly."
+            );
+        } finally {
+            setJoeLoading(false);
+        }
+    };
+
+    /* ------------------------------------------------------------------ */
+    /* Mood analysis (SAFE)                                                */
+    /* ------------------------------------------------------------------ */
+
+    const analyzeMoodAsync = async (
+        entryId: string,
+        text: string,
+        selectedTags: string[]
+    ) => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/analyze-mood`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text, tags: selectedTags }),
+            });
+
+            if (!response.ok) {
+                throw new Error("Mood API failed");
+            }
+
+            const data = await response.json();
+            const moodScore =
+                typeof data?.moodScore === "number" ? data.moodScore : 3;
+
+            await updateDoc(doc(db, "journals", entryId), {
+                moodScore,
+            });
+
+            setEntries((prev) =>
+                prev.map((e) =>
+                    e.id === entryId ? { ...e, moodScore } : e
+                )
+            );
+        } catch (err) {
+            console.error("Mood analysis failed:", err);
+
+            // Fallback to neutral mood
+            await updateDoc(doc(db, "journals", entryId), {
+                moodScore: 3,
+            });
+
+            setEntries((prev) =>
+                prev.map((e) =>
+                    e.id === entryId ? { ...e, moodScore: 3 } : e
+                )
+            );
+        }
+    };
+
+    /* ------------------------------------------------------------------ */
+    /* Add entry                                                           */
+    /* ------------------------------------------------------------------ */
+
+    const handleAddEntry = async () => {
+        if (!uid || !newText.trim() || !tags.length) return;
+
+        try {
+            const ref = await addDoc(collection(db, "journals"), {
+                text: newText.trim(),
+                createdAt: serverTimestamp(),
+                moodScore: null,
+                shared,
+                tags: tags.join(", "),
+                userId: uid,
+                userName,
+            });
+
+            await analyzeMoodAsync(ref.id, newText.trim(), tags);
+
             setNewText("");
-            setMoodScore(3);
+            setTags([]);
             setShared(false);
-            setTags("");
             setModalVisible(false);
 
             fetchEntries();
         } catch (err) {
-            console.error("Error adding journal entry:", err);
+            console.error("Add journal error:", err);
         }
     };
 
@@ -104,17 +203,26 @@ export default function Journal() {
         fetchEntries();
     }, [uid]);
 
+    useEffect(() => {
+        if (modalVisible) {
+            fetchJoeMessage();
+        }
+    }, [modalVisible]);
+
+    const toggleTag = (label: string) => {
+        setTags((prev) =>
+            prev.includes(label)
+                ? prev.filter((t) => t !== label)
+                : [...prev, label]
+        );
+    };
+
+    /* ------------------------------------------------------------------ */
+    /* UI                                                                  */
+    /* ------------------------------------------------------------------ */
+
     return (
         <View style={styles.screen}>
-            <View style={styles.titleSection}>
-                <Text style={styles.title}>
-                    My Journal <Text style={styles.sparkle}>✨</Text>
-                </Text>
-                <Text style={styles.subtitle}>
-                    Write freely, Joe is here to support you.
-                </Text>
-            </View>
-
             <TouchableOpacity
                 style={styles.newEntryButton}
                 onPress={() => setModalVisible(true)}
@@ -131,18 +239,18 @@ export default function Journal() {
                     <View style={styles.card}>
                         <Text style={styles.cardDate}>
                             {item.createdAt?.toDate
-                                ? item.createdAt.toDate().toLocaleDateString()
-                                : "Just now"}{" "}
-                            <Text style={styles.cardMood}>
-                                Mood: {item.moodScore}
-                            </Text>
+                                ? item.createdAt
+                                    .toDate()
+                                    .toLocaleDateString()
+                                : "Just now"}
                         </Text>
 
-                        <Text style={styles.cardTags}>Tags: {item.tags}</Text>
-                        <Text style={styles.cardText}>{item.text}</Text>
-                        <Text style={styles.cardShared}>
-                            Shared: {item.shared ? "Yes" : "No"}
+                        <Text style={styles.cardMood}>
+                            Mood: {item.moodScore ?? "Analyzing…"}
                         </Text>
+
+                        <Text style={styles.cardText}>{item.text}</Text>
+                        <Text style={styles.cardTags}>Tags: {item.tags}</Text>
                     </View>
                 )}
             />
@@ -150,48 +258,42 @@ export default function Journal() {
             <Modal visible={modalVisible} animationType="slide" transparent>
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>New Journal Entry</Text>
+                        <Text style={styles.modalTitle}>Joe says:</Text>
+
+                        {joeLoading ? (
+                            <ActivityIndicator />
+                        ) : (
+                            <Text style={styles.joeText}>{joeMessage}</Text>
+                        )}
 
                         <TextInput
                             style={styles.modalInput}
-                            placeholder="Write your thoughts..."
+                            placeholder="How are you feeling right now?"
                             multiline
                             value={newText}
                             onChangeText={setNewText}
                         />
 
-                        <TextInput
-                            style={styles.modalInput}
-                            placeholder="Tags"
-                            value={tags}
-                            onChangeText={setTags}
-                        />
+                        <Text style={styles.tagsTitle}>
+                            How are you feeling today?
+                        </Text>
 
-                        <View style={styles.moodContainer}>
-                            <Text>Mood Score (1–5): {moodScore}</Text>
-                            <View style={styles.moodButtons}>
-                                {[1, 2, 3, 4, 5].map(num => (
-                                    <TouchableOpacity
-                                        key={num}
-                                        style={[
-                                            styles.moodButton,
-                                            moodScore === num && {
-                                                backgroundColor: "#7C3AED",
-                                            },
-                                        ]}
-                                        onPress={() => setMoodScore(num)}
-                                    >
-                                        <Text
-                                            style={[
-                                                styles.moodButtonText,
-                                                moodScore === num && { color: "white" },
-                                            ]}
-                                        >
-                                            {num}
-                                        </Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
+                        <View style={styles.tagsContainer}>
+                            {TAGS.map((t) => (
+                                <TouchableOpacity
+                                    key={t.label}
+                                    style={[
+                                        styles.tagButton,
+                                        tags.includes(t.label) &&
+                                        styles.tagSelected,
+                                    ]}
+                                    onPress={() => toggleTag(t.label)}
+                                >
+                                    <Text style={styles.tagText}>
+                                        {t.icon} {t.label}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
                         </View>
 
                         <View style={styles.sharedContainer}>
@@ -201,19 +303,17 @@ export default function Journal() {
 
                         <View style={styles.modalButtons}>
                             <TouchableOpacity
-                                style={[styles.modalButton, { backgroundColor: "#7C3AED" }]}
+                                style={styles.saveButton}
                                 onPress={handleAddEntry}
                             >
-                                <Text style={styles.modalButtonText}>Save</Text>
+                                <Text style={styles.saveText}>Save</Text>
                             </TouchableOpacity>
 
                             <TouchableOpacity
-                                style={[styles.modalButton, { backgroundColor: "#E5E7EB" }]}
+                                style={styles.cancelButton}
                                 onPress={() => setModalVisible(false)}
                             >
-                                <Text style={[styles.modalButtonText, { color: "#111827" }]}>
-                                    Cancel
-                                </Text>
+                                <Text>Cancel</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -223,13 +323,8 @@ export default function Journal() {
     );
 }
 
-/* STYLES UNCHANGED */
 const styles = StyleSheet.create({
-    screen: { flex: 1, backgroundColor: "#F9FAFB", padding: 16 },
-    titleSection: { marginBottom: 16 },
-    title: { fontSize: 22, fontWeight: "700" },
-    sparkle: { color: "#8B5CF6" },
-    subtitle: { color: "#6B7280", marginTop: 6 },
+    screen: { flex: 1, padding: 16, backgroundColor: "#F9FAFB" },
     newEntryButton: {
         backgroundColor: "#7C3AED",
         padding: 14,
@@ -243,14 +338,12 @@ const styles = StyleSheet.create({
         padding: 16,
         borderRadius: 14,
         marginBottom: 12,
-        borderWidth: 1,
-        borderColor: "#E5E7EB",
     },
     cardDate: { fontWeight: "600" },
-    cardMood: { color: "#6B7280" },
-    cardTags: { fontStyle: "italic", color: "#6B7280" },
-    cardText: { marginVertical: 6 },
-    cardShared: { fontSize: 12, color: "#6B7280" },
+    cardMood: { color: "#6B7280", marginTop: 4 },
+    cardText: { marginTop: 6 },
+    cardTags: { fontStyle: "italic", color: "#6B7280", marginTop: 4 },
+
     modalOverlay: {
         flex: 1,
         backgroundColor: "rgba(0,0,0,0.5)",
@@ -263,7 +356,8 @@ const styles = StyleSheet.create({
         borderRadius: 20,
         width: "90%",
     },
-    modalTitle: { fontSize: 18, fontWeight: "700", marginBottom: 12 },
+    modalTitle: { fontSize: 18, fontWeight: "700" },
+    joeText: { marginVertical: 10, color: "#374151" },
     modalInput: {
         borderWidth: 1,
         borderColor: "#E5E7EB",
@@ -271,28 +365,39 @@ const styles = StyleSheet.create({
         padding: 12,
         marginBottom: 12,
     },
-    moodContainer: { marginBottom: 12 },
-    moodButtons: { flexDirection: "row", marginTop: 6 },
-    moodButton: {
-        padding: 8,
-        marginRight: 6,
-        borderRadius: 8,
+    tagsTitle: { fontWeight: "700", marginBottom: 8 },
+    tagsContainer: { flexDirection: "row", flexWrap: "wrap", marginBottom: 12 },
+    tagButton: {
+        padding: 10,
+        borderRadius: 12,
         borderWidth: 1,
         borderColor: "#E5E7EB",
+        marginRight: 8,
+        marginBottom: 8,
     },
-    moodButtonText: { fontWeight: "600" },
+    tagSelected: { backgroundColor: "#7C3AED", borderColor: "#7C3AED" },
+    tagText: { fontWeight: "600", color: "#111827" },
     sharedContainer: {
         flexDirection: "row",
         justifyContent: "space-between",
         marginBottom: 16,
     },
     modalButtons: { flexDirection: "row" },
-    modalButton: {
+    saveButton: {
         flex: 1,
-        paddingVertical: 12,
+        backgroundColor: "#7C3AED",
+        padding: 12,
         borderRadius: 12,
         alignItems: "center",
-        marginHorizontal: 4,
+        marginRight: 4,
     },
-    modalButtonText: { fontWeight: "600", color: "white" },
+    saveText: { color: "white", fontWeight: "600" },
+    cancelButton: {
+        flex: 1,
+        backgroundColor: "#E5E7EB",
+        padding: 12,
+        borderRadius: 12,
+        alignItems: "center",
+        marginLeft: 4,
+    },
 });

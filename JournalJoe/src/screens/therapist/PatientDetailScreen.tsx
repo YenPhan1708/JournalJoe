@@ -43,6 +43,8 @@ interface Journal {
     createdAt: Timestamp;
     moodScore: number;
     tags: string[];
+    insight?: string;
+    conclusion?: string;
 }
 
 /* =======================
@@ -74,7 +76,7 @@ const getSessionStatusStyle = (
 export default function PatientDetailScreen() {
     const navigation = useNavigation();
     const route = useRoute<any>();
-    const { patientId } = route.params;
+    const patientId = route.params?.patientId;
 
     const [patient, setPatient] = useState<Patient | null>(null);
     const [sessions, setSessions] = useState<Session[]>([]);
@@ -128,6 +130,8 @@ export default function PatientDetailScreen() {
                         tags: Array.isArray(data.tags)
                             ? data.tags
                             : [data.tags],
+                        insight: undefined,
+                        conclusion: undefined,
                     };
                 })
             );
@@ -138,6 +142,47 @@ export default function PatientDetailScreen() {
             unsubJournals();
         };
     }, [patientId]);
+
+    /* =======================
+       AI ANALYSIS
+    ======================= */
+
+    useEffect(() => {
+        if (journals.length === 0) return;
+
+        const toAnalyze = journals.filter(
+            j => !j.insight || !j.conclusion
+        );
+
+        toAnalyze.forEach(async j => {
+            try {
+                const res = await fetch(
+                    "http://172.20.10.2:3000/api/journal-analysis",
+                    {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ text: j.text }),
+                    }
+                );
+
+                const data = await res.json();
+
+                setJournals(prev =>
+                    prev.map(journal =>
+                        journal.id === j.id
+                            ? {
+                                ...journal,
+                                insight: data.insight,
+                                conclusion: data.conclusion,
+                            }
+                            : journal
+                    )
+                );
+            } catch (err) {
+                console.error("Journal AI error:", err);
+            }
+        });
+    }, [journals]);
 
     /* =======================
        DERIVED DATA
@@ -152,32 +197,58 @@ export default function PatientDetailScreen() {
     const upcomingSessions = useMemo(
         () =>
             sessions.filter(
-                s => s.status === "accepted" && s.date.toDate() >= today
+                s =>
+                    s.status === "accepted" &&
+                    s.date.toDate() >= today
             ),
         [sessions, today]
     );
 
     const pastSessions = useMemo(
-        () =>
-            sessions.filter(
-                s => s.date.toDate() < today
-            ),
+        () => sessions.filter(s => s.date.toDate() < today),
         [sessions, today]
     );
 
-    const moodChartData = useMemo(
-        () =>
-            journals.map(j => ({
-                label: j.createdAt
-                    .toDate()
-                    .toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                    }),
-                entries: j.moodScore,
-            })),
-        [journals]
-    );
+    /* =======================
+       MOOD TREND (DAILY AVG)
+    ======================= */
+
+    const moodChartData = useMemo(() => {
+        const grouped: Record<
+            string,
+            { total: number; count: number }
+        > = {};
+
+        journals.forEach(j => {
+            const dateKey = j.createdAt
+                .toDate()
+                .toISOString()
+                .split("T")[0]; // YYYY-MM-DD
+
+            if (!grouped[dateKey]) {
+                grouped[dateKey] = { total: 0, count: 0 };
+            }
+
+            grouped[dateKey].total += j.moodScore;
+            grouped[dateKey].count += 1;
+        });
+
+        return Object.entries(grouped)
+            .map(([date, value]) => ({
+                label: new Date(date).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                }),
+                entries: Number(
+                    (value.total / value.count).toFixed(1)
+                ),
+            }))
+            .sort(
+                (a, b) =>
+                    new Date(a.label).getTime() -
+                    new Date(b.label).getTime()
+            );
+    }, [journals]);
 
     if (!patient) return null;
 
@@ -191,28 +262,33 @@ export default function PatientDetailScreen() {
                 <Text style={styles.back}>← Back</Text>
             </TouchableOpacity>
 
-            <Text style={styles.title}>{patient.name.toUpperCase()}</Text>
+            <Text style={styles.title}>
+                {patient.name.toUpperCase()}
+            </Text>
             <Text style={styles.subtitle}>{patient.email}</Text>
 
-            {/* UPCOMING SESSIONS */}
             <Text style={styles.section}>📅 Upcoming Sessions</Text>
             {upcomingSessions.length === 0 ? (
                 <Text style={styles.empty}>No upcoming sessions</Text>
             ) : (
                 upcomingSessions.map(s => (
-                    <View key={s.id} style={styles.sessionCardUpcoming}>
+                    <View
+                        key={s.id}
+                        style={styles.sessionCardUpcoming}
+                    >
                         <Text>
-                            {s.date.toDate().toLocaleString()} • {s.duration} min
+                            {s.date.toDate().toLocaleString()} •{" "}
+                            {s.duration} min
                         </Text>
-                        <Text style={getSessionStatusStyle(s.status)}>
+                        <Text
+                            style={getSessionStatusStyle(s.status)}
+                        >
                             {s.status.toUpperCase()}
                         </Text>
                     </View>
                 ))
             )}
 
-            {/* MOOD TREND */}
-            <Text style={styles.section}>Mood Trend</Text>
             {moodChartData.length < 2 ? (
                 <Text style={styles.empty}>
                     Not enough data to show mood trend.
@@ -221,8 +297,10 @@ export default function PatientDetailScreen() {
                 <MoodChart data={moodChartData} />
             )}
 
-            {/* JOURNALS */}
-            <Text style={styles.section}>Recent Journal Entries</Text>
+            <Text style={styles.section}>
+                📝 Recent Journal Entries
+            </Text>
+
             {journals.map(j => (
                 <View key={j.id} style={styles.entryCard}>
                     <Text style={styles.entryHeader}>
@@ -232,29 +310,51 @@ export default function PatientDetailScreen() {
 
                     <Text style={styles.entryText}>{j.text}</Text>
 
-                    {/* AI PLACEHOLDER */}
                     <View style={styles.aiPlaceholder}>
-                        <Text style={styles.aiTitle}>AI Insight (coming soon)</Text>
-                        <Text style={styles.aiText}>
-                            This space will contain AI-generated reflection,
-                            emotional patterns, and therapist-ready insights.
-                        </Text>
+                        <Text style={styles.aiTitle}>AI Insight</Text>
+
+                        {j.insight ? (
+                            <Text style={styles.aiText}>
+                                {j.insight}
+                            </Text>
+                        ) : (
+                            <Text style={styles.aiText}>
+                                Analyzing...
+                            </Text>
+                        )}
+
+                        {j.conclusion && (
+                            <Text
+                                style={[
+                                    styles.aiText,
+                                    { marginTop: 6 },
+                                ]}
+                            >
+                                {j.conclusion}
+                            </Text>
+                        )}
                     </View>
                 </View>
             ))}
 
-            {/* SESSION HISTORY */}
             <Text style={styles.section}>Session History</Text>
             {pastSessions.length === 0 ? (
                 <Text style={styles.empty}>No past sessions</Text>
             ) : (
                 pastSessions.map(s => (
-                    <View key={s.id} style={styles.sessionCardPast}>
+                    <View
+                        key={s.id}
+                        style={styles.sessionCardPast}
+                    >
                         <Text>
-                            {s.date.toDate().toLocaleDateString()} •{" "}
-                            {s.duration} min
+                            {s.date
+                                .toDate()
+                                .toLocaleDateString()}{" "}
+                            • {s.duration} min
                         </Text>
-                        <Text style={getSessionStatusStyle(s.status)}>
+                        <Text
+                            style={getSessionStatusStyle(s.status)}
+                        >
                             {s.status.toUpperCase()}
                         </Text>
                     </View>
@@ -271,10 +371,15 @@ export default function PatientDetailScreen() {
 const styles = StyleSheet.create({
     scroll: { padding: 16, backgroundColor: "#FFFFFF" },
     back: { fontWeight: "600", marginBottom: 8 },
+
     title: { fontSize: 24, fontWeight: "700" },
     subtitle: { color: "#6B7280", marginBottom: 16 },
 
-    section: { fontSize: 16, fontWeight: "700", marginVertical: 12 },
+    section: {
+        fontSize: 16,
+        fontWeight: "700",
+        marginVertical: 12,
+    },
     empty: { color: "#6B7280", fontSize: 12 },
 
     sessionCardUpcoming: {

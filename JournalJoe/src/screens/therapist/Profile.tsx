@@ -32,6 +32,7 @@ export default function Profile() {
     const [therapist, setTherapist] = useState<Therapist | null>(null);
     const [activePatients, setActivePatients] = useState(0);
     const [totalSessions, setTotalSessions] = useState(0);
+    const [openSection, setOpenSection] = useState<string | null>(null);
 
     const user = auth.currentUser;
 
@@ -120,37 +121,115 @@ export default function Profile() {
                 </View>
             </View>
 
-            {/* Settings */}
-            <View style={styles.section}>
-                {[
-                    { icon: "settings-outline", label: "Account Settings" },
-                    { icon: "shield-checkmark-outline", label: "Privacy & Security" },
-                    { icon: "document-text-outline", label: "Professional Guidelines" },
-                    { icon: "help-circle-outline", label: "Help & Support" },
-                ].map(item => (
-                    <Pressable key={item.label} style={styles.row}>
-                        <Ionicons
-                            name={item.icon}
-                            size={20}
-                            color={COLORS.text}
-                        />
-                        <Text style={styles.rowText}>{item.label}</Text>
-                    </Pressable>
-                ))}
-            </View>
+            {/* Privacy & Security */}
+            <AccordionItem
+                title="Privacy & Security"
+                icon="shield-checkmark-outline"
+                isOpen={openSection === "privacy"}
+                onPress={() =>
+                    setOpenSection(openSection === "privacy" ? null : "privacy")
+                }
+            >
+                <Text style={styles.accordionText}>
+                    Patient data is processed in accordance with GDPR and
+                    professional confidentiality obligations.
+                </Text>
+                <Text style={styles.accordionBullet}>
+                    • Secure access control and authentication
+                </Text>
+                <Text style={styles.accordionBullet}>
+                    • No secondary use of patient data
+                </Text>
+                <Text style={styles.accordionBullet}>
+                    • Data minimization and purpose limitation
+                </Text>
+                <Text style={styles.accordionBullet}>
+                    • Therapist accountability for data handling
+                </Text>
+            </AccordionItem>
 
-            {/* AI Ethics */}
-            <View style={styles.infoBoxBlue}>
-                <Text style={styles.infoTitleBlue}>AI Ethics & Compliance:</Text>
-                {[
-                    "AI provides supportive insights only",
-                    "No diagnoses are generated",
-                    "Professional judgment required",
-                    "EU AI Act compliant design",
-                ].map(line => (
-                    <Text key={line} style={styles.infoTextBlue}>• {line}</Text>
-                ))}
-            </View>
+            {/* Professional Guidelines */}
+            <AccordionItem
+                title="Professional Guidelines"
+                icon="document-text-outline"
+                isOpen={openSection === "guidelines"}
+                onPress={() =>
+                    setOpenSection(
+                        openSection === "guidelines" ? null : "guidelines"
+                    )
+                }
+            >
+                <Text style={styles.accordionText}>
+                    This platform supports — but does not replace —
+                    professional clinical judgment.
+                </Text>
+                <Text style={styles.accordionBullet}>
+                    • Therapists retain full decision authority
+                </Text>
+                <Text style={styles.accordionBullet}>
+                    • AI insights must be critically assessed
+                </Text>
+                <Text style={styles.accordionBullet}>
+                    • Use aligns with ethical therapy standards
+                </Text>
+                <Text style={styles.accordionBullet}>
+                    • Not intended for autonomous care decisions
+                </Text>
+            </AccordionItem>
+
+            {/* Help & Support */}
+            <AccordionItem
+                title="Help & Support"
+                icon="help-circle-outline"
+                isOpen={openSection === "help"}
+                onPress={() =>
+                    setOpenSection(openSection === "help" ? null : "help")
+                }
+            >
+                <Text style={styles.accordionText}>
+                    For technical or operational support, contact the platform
+                    provider.
+                </Text>
+                <Text style={styles.accordionBullet}>
+                    • Report bugs or system issues
+                </Text>
+                <Text style={styles.accordionBullet}>
+                    • Request clarification on platform behavior
+                </Text>
+                <Text style={styles.accordionBullet}>
+                    • Contact the business owner or developer
+                </Text>
+                <Text style={styles.accordionBullet}>
+                    • Not intended for clinical escalation
+                </Text>
+            </AccordionItem>
+
+            {/* AI Ethics & Compliance */}
+            <AccordionItem
+                title="AI Ethics & Compliance"
+                icon="sparkles-outline"
+                isOpen={openSection === "ai"}
+                onPress={() =>
+                    setOpenSection(openSection === "ai" ? null : "ai")
+                }
+            >
+                <Text style={styles.accordionText}>
+                    The AI system is designed in line with EU AI Act
+                    requirements for limited-risk systems.
+                </Text>
+                <Text style={styles.accordionBullet}>
+                    • AI provides supportive insights only
+                </Text>
+                <Text style={styles.accordionBullet}>
+                    • No diagnoses or treatment plans generated
+                </Text>
+                <Text style={styles.accordionBullet}>
+                    • Human oversight is mandatory
+                </Text>
+                <Text style={styles.accordionBullet}>
+                    • Transparency and explainability prioritized
+                </Text>
+            </AccordionItem>
 
             {/* Sign Out */}
             <Pressable
@@ -165,12 +244,52 @@ export default function Profile() {
 }
 
 /* =======================
-   STYLES (UNCHANGED)
+   ACCORDION ITEM
+======================= */
+
+function AccordionItem({
+                           title,
+                           icon,
+                           isOpen,
+                           onPress,
+                           children,
+                       }: {
+    title: string;
+    icon: string;
+    isOpen: boolean;
+    onPress: () => void;
+    children: React.ReactNode;
+}) {
+    return (
+        <View style={{ marginBottom: 10 }}>
+            <Pressable style={styles.row} onPress={onPress}>
+                <Ionicons name={icon} size={20} color={COLORS.text} />
+                <Text style={styles.rowText}>{title}</Text>
+                <Ionicons
+                    name={isOpen ? "chevron-down" : "chevron-forward"}
+                    size={18}
+                    color={COLORS.textMuted}
+                    style={{ marginLeft: "auto" }}
+                />
+            </Pressable>
+
+            {isOpen && (
+                <View style={styles.accordionContent}>
+                    {children}
+                </View>
+            )}
+        </View>
+    );
+}
+
+/* =======================
+   STYLES (EXTENDED ONLY)
 ======================= */
 
 const styles = StyleSheet.create({
     scroll: { padding: 16, backgroundColor: COLORS.bg },
     pageTitle: { fontSize: 22, fontWeight: "700", marginBottom: 16 },
+
     profileCard: {
         flexDirection: "row",
         alignItems: "center",
@@ -194,6 +313,7 @@ const styles = StyleSheet.create({
     name: { fontSize: 16, fontWeight: "600" },
     email: { color: COLORS.textMuted, marginTop: 2 },
     role: { color: COLORS.primary, marginTop: 4, fontWeight: "500" },
+
     statsRow: { flexDirection: "row", gap: 12, marginBottom: 16 },
     statCard: {
         flex: 1,
@@ -205,7 +325,7 @@ const styles = StyleSheet.create({
     },
     statValue: { fontSize: 22, fontWeight: "700" },
     statLabel: { color: COLORS.textMuted, marginTop: 4 },
-    section: { marginBottom: 16 },
+
     row: {
         flexDirection: "row",
         alignItems: "center",
@@ -215,19 +335,29 @@ const styles = StyleSheet.create({
         borderRadius: 16,
         borderWidth: 1,
         borderColor: COLORS.border,
-        marginBottom: 10,
     },
     rowText: { fontSize: 15, fontWeight: "500" },
-    infoBoxBlue: {
-        backgroundColor: "#F0F6FF",
-        borderRadius: 16,
-        padding: 16,
+
+    accordionContent: {
+        backgroundColor: "#F9FAFB",
         borderWidth: 1,
-        borderColor: "#BFDBFE",
-        marginBottom: 16,
+        borderColor: COLORS.border,
+        borderTopWidth: 0,
+        borderBottomLeftRadius: 16,
+        borderBottomRightRadius: 16,
+        padding: 16,
     },
-    infoTitleBlue: { fontWeight: "700", color: "#1D4ED8", marginBottom: 8 },
-    infoTextBlue: { color: "#1E40AF", fontSize: 13, marginBottom: 4 },
+    accordionText: {
+        fontSize: 14,
+        color: COLORS.text,
+        marginBottom: 6,
+    },
+    accordionBullet: {
+        fontSize: 13,
+        color: COLORS.textMuted,
+        marginBottom: 4,
+    },
+
     signOut: {
         flexDirection: "row",
         justifyContent: "center",
@@ -237,6 +367,7 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: "#FCA5A5",
         backgroundColor: "#FEF2F2",
+        marginTop: 16,
     },
     signOutText: { color: "#DC2626", fontWeight: "600" },
 });
