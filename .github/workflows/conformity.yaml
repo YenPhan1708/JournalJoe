@@ -1,0 +1,31 @@
+name: Conformity Scan
+
+on:
+  push:
+    branches:
+      - develop
+      - feature*
+
+jobs:
+  security:
+    name: Security Check JS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+
+      - name: Install JS dependencies
+        run: |
+          npm install -C JournalJoe
+          npm install -C JournalJoe_Backend/
+
+      - name: Run JS security scan (npm audit)
+        run: |
+          npm audit --audit-level=moderate -C JournalJoe
+          npm audit --audit-level=moderate -C JournalJoe_Backend/
