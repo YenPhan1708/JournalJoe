@@ -9,6 +9,10 @@ import {
     Modal,
     Switch,
     ActivityIndicator,
+    Alert,
+    ScrollView,
+    KeyboardAvoidingView,
+    Platform,
 } from "react-native";
 import { auth, db } from "../../services/firebase";
 import {
@@ -24,6 +28,10 @@ import {
     doc,
 } from "firebase/firestore";
 
+/* ------------------------------------------------------------------ */
+/* Types                                                              */
+/* ------------------------------------------------------------------ */
+
 interface JournalEntry {
     id: string;
     text: string;
@@ -35,15 +43,29 @@ interface JournalEntry {
     userName: string;
 }
 
-const API_BASE_URL = "http://172.20.10.2:3000/api";
+interface TagItem {
+    label: string;
+    icon: string;
+}
 
-const TAGS = [
-    { label: "Happy", icon: "😄" },
-    { label: "Sad", icon: "😢" },
-    { label: "Anxious", icon: "😰" },
-    { label: "Excited", icon: "🤩" },
-    { label: "Tired", icon: "😴" },
-];
+interface TagGroup {
+    category: string;
+    items: TagItem[];
+}
+
+/* ------------------------------------------------------------------ */
+
+const API_BASE_URL = "http://192.168.1.72:3000/api";
+
+/* ------------------------------------------------------------------ */
+/* Tags                                                               */
+/* ------------------------------------------------------------------ */
+
+const TAGS: TagGroup[] = [{ category: "Joy / Positive", items: [ { label: "Happy", icon: "😄" }, { label: "Content", icon: "🙂" }, { label: "Grateful", icon: "🙏" }, { label: "Hopeful", icon: "🌱" }, { label: "Proud", icon: "🏆" }, { label: "Relieved", icon: "😌" }, { label: "Loved", icon: "❤️" }, { label: "Peaceful", icon: "🕊️" }, ], }, { category: "Sadness", items: [ { label: "Sad", icon: "😢" }, { label: "Lonely", icon: "🥀" }, { label: "Hopeless", icon: "🌧️" }, { label: "Empty", icon: "🕳️" }, { label: "Disappointed", icon: "😞" }, { label: "Grieving", icon: "🖤" }, { label: "Hurt", icon: "💔" }, ], }, { category: "Anxiety / Fear", items: [ { label: "Anxious", icon: "😰" }, { label: "Overwhelmed", icon: "🌪️" }, { label: "Stressed", icon: "🧠" }, { label: "Worried", icon: "💭" }, { label: "Panicked", icon: "🚨" }, { label: "Insecure", icon: "🫥" }, { label: "Nervous", icon: "😬" }, ], }, { category: "Anger / Frustration", items: [ { label: "Angry", icon: "😠" }, { label: "Irritated", icon: "😤" }, { label: "Frustrated", icon: "🧱" }, { label: "Annoyed", icon: "🙄" }, { label: "Resentful", icon: "🧊" }, { label: "Bitter", icon: "🧂" }, ], }, { category: "Low Energy / Burnout", items: [ { label: "Tired", icon: "😴" }, { label: "Exhausted", icon: "🛌" }, { label: "Drained", icon: "🔋" }, { label: "Burned out", icon: "🔥" }, { label: "Unmotivated", icon: "🐌" }, { label: "Foggy", icon: "🌫️" }, ], }, { category: "High Energy", items: [ { label: "Excited", icon: "🤩" }, { label: "Energized", icon: "⚡" }, { label: "Motivated", icon: "🚀" }, { label: "Inspired", icon: "💡" }, { label: "Focused", icon: "🎯" }, { label: "Restless", icon: "🏃" }, ], }, { category: "Calm / Regulation", items: [ { label: "Calm", icon: "🧘" }, { label: "Grounded", icon: "🌍" }, { label: "Centered", icon: "🧭" }, { label: "Safe", icon: "🛡️" }, { label: "Relaxed", icon: "🛀" }, ], }, { category: "Self-worth / Identity", items: [ { label: "Confident", icon: "💪" }, { label: "Guilty", icon: "⚖️" }, { label: "Ashamed", icon: "🙈" }, { label: "Self-critical", icon: "🪞" }, { label: "Accepted", icon: "🤍" }, { label: "Worthy", icon: "🌟" }, ], },];
+
+/* ------------------------------------------------------------------ */
+/* Component                                                          */
+/* ------------------------------------------------------------------ */
 
 export default function Journal() {
     const [entries, setEntries] = useState<JournalEntry[]>([]);
@@ -53,7 +75,7 @@ export default function Journal() {
     const [tags, setTags] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
 
-    const [joeMessage, setJoeMessage] = useState<string>("");
+    const [joeMessage, setJoeMessage] = useState("");
     const [joeLoading, setJoeLoading] = useState(false);
 
     const user = auth.currentUser;
@@ -99,7 +121,7 @@ export default function Journal() {
 
         setJoeLoading(true);
         try {
-            const response = await fetch(`${API_BASE_URL}/joe-message`, {
+            const res = await fetch(`${API_BASE_URL}/joe-message`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -107,20 +129,17 @@ export default function Journal() {
                 }),
             });
 
-            const data = await response.json();
+            const data = await res.json();
             setJoeMessage(data.message);
-        } catch (err) {
-            console.error("Joe message error:", err);
-            setJoeMessage(
-                "I’m here with you. Take your time and write honestly."
-            );
+        } catch {
+            setJoeMessage("I’m here with you. Take your time.");
         } finally {
             setJoeLoading(false);
         }
     };
 
     /* ------------------------------------------------------------------ */
-    /* Mood analysis (SAFE)                                                */
+    /* Mood analysis (NON-BLOCKING)                                        */
     /* ------------------------------------------------------------------ */
 
     const analyzeMoodAsync = async (
@@ -129,42 +148,25 @@ export default function Journal() {
         selectedTags: string[]
     ) => {
         try {
-            const response = await fetch(`${API_BASE_URL}/analyze-mood`, {
+            const res = await fetch(`${API_BASE_URL}/analyze-mood`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ text, tags: selectedTags }),
+                body: JSON.stringify({ text }),
             });
 
-            if (!response.ok) {
-                throw new Error("Mood API failed");
-            }
-
-            const data = await response.json();
+            const data = await res.json();
             const moodScore =
                 typeof data?.moodScore === "number" ? data.moodScore : 3;
 
-            await updateDoc(doc(db, "journals", entryId), {
-                moodScore,
-            });
+            await updateDoc(doc(db, "journals", entryId), { moodScore });
 
             setEntries((prev) =>
                 prev.map((e) =>
                     e.id === entryId ? { ...e, moodScore } : e
                 )
             );
-        } catch (err) {
-            console.error("Mood analysis failed:", err);
-
-            // Fallback to neutral mood
-            await updateDoc(doc(db, "journals", entryId), {
-                moodScore: 3,
-            });
-
-            setEntries((prev) =>
-                prev.map((e) =>
-                    e.id === entryId ? { ...e, moodScore: 3 } : e
-                )
-            );
+        } catch {
+            await updateDoc(doc(db, "journals", entryId), { moodScore: 3 });
         }
     };
 
@@ -173,7 +175,11 @@ export default function Journal() {
     /* ------------------------------------------------------------------ */
 
     const handleAddEntry = async () => {
-        if (!uid || !newText.trim() || !tags.length) return;
+        if (!uid) return Alert.alert("Error", "User not authenticated");
+        if (!newText.trim())
+            return Alert.alert("Missing text", "Write something first");
+        if (!tags.length)
+            return Alert.alert("Missing tags", "Select at least one tag");
 
         try {
             const ref = await addDoc(collection(db, "journals"), {
@@ -186,7 +192,7 @@ export default function Journal() {
                 userName,
             });
 
-            await analyzeMoodAsync(ref.id, newText.trim(), tags);
+            analyzeMoodAsync(ref.id, newText.trim(), tags);
 
             setNewText("");
             setTags([]);
@@ -204,9 +210,7 @@ export default function Journal() {
     }, [uid]);
 
     useEffect(() => {
-        if (modalVisible) {
-            fetchJoeMessage();
-        }
+        if (modalVisible) fetchJoeMessage();
     }, [modalVisible]);
 
     const toggleTag = (label: string) => {
@@ -239,14 +243,15 @@ export default function Journal() {
                     <View style={styles.card}>
                         <Text style={styles.cardDate}>
                             {item.createdAt?.toDate
-                                ? item.createdAt
-                                    .toDate()
-                                    .toLocaleDateString()
+                                ? item.createdAt.toDate().toLocaleDateString()
                                 : "Just now"}
                         </Text>
 
                         <Text style={styles.cardMood}>
-                            Mood: {item.moodScore ?? "Analyzing…"}
+                            Mood:{" "}
+                            {item.moodScore === null
+                                ? "Analyzing…"
+                                : item.moodScore}
                         </Text>
 
                         <Text style={styles.cardText}>{item.text}</Text>
@@ -255,76 +260,107 @@ export default function Journal() {
                 )}
             />
 
+            {/* ================= MODAL (FIXED) ================= */}
+
             <Modal visible={modalVisible} animationType="slide" transparent>
-                <View style={styles.modalOverlay}>
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === "ios" ? "padding" : undefined}
+                    style={styles.modalOverlay}
+                >
                     <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Joe says:</Text>
+                        <ScrollView
+                            showsVerticalScrollIndicator={false}
+                            contentContainerStyle={styles.modalScroll}
+                        >
+                            <Text style={styles.modalTitle}>Joe says:</Text>
 
-                        {joeLoading ? (
-                            <ActivityIndicator />
-                        ) : (
-                            <Text style={styles.joeText}>{joeMessage}</Text>
-                        )}
+                            {joeLoading ? (
+                                <ActivityIndicator />
+                            ) : (
+                                <Text style={styles.joeText}>{joeMessage}</Text>
+                            )}
 
-                        <TextInput
-                            style={styles.modalInput}
-                            placeholder="How are you feeling right now?"
-                            multiline
-                            value={newText}
-                            onChangeText={setNewText}
-                        />
+                            <TextInput
+                                style={styles.modalInput}
+                                placeholder="How are you feeling right now?"
+                                multiline
+                                value={newText}
+                                onChangeText={setNewText}
+                            />
 
-                        <Text style={styles.tagsTitle}>
-                            How are you feeling today?
-                        </Text>
-
-                        <View style={styles.tagsContainer}>
-                            {TAGS.map((t) => (
-                                <TouchableOpacity
-                                    key={t.label}
-                                    style={[
-                                        styles.tagButton,
-                                        tags.includes(t.label) &&
-                                        styles.tagSelected,
-                                    ]}
-                                    onPress={() => toggleTag(t.label)}
-                                >
-                                    <Text style={styles.tagText}>
-                                        {t.icon} {t.label}
+                            {TAGS.map((group) => (
+                                <View key={group.category}>
+                                    <Text style={styles.tagsCategory}>
+                                        {group.category}
                                     </Text>
-                                </TouchableOpacity>
+
+                                    <View style={styles.tagsContainer}>
+                                        {group.items.map((item) => (
+                                            <TouchableOpacity
+                                                key={item.label}
+                                                style={[
+                                                    styles.tagButton,
+                                                    tags.includes(item.label) &&
+                                                    styles.tagSelected,
+                                                ]}
+                                                onPress={() =>
+                                                    toggleTag(item.label)
+                                                }
+                                            >
+                                                <Text
+                                                    style={[
+                                                        styles.tagText,
+                                                        tags.includes(
+                                                            item.label
+                                                        ) && { color: "white" },
+                                                    ]}
+                                                >
+                                                    {item.icon} {item.label}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </View>
                             ))}
-                        </View>
 
-                        <View style={styles.sharedContainer}>
-                            <Text>Share with therapist:</Text>
-                            <Switch value={shared} onValueChange={setShared} />
-                        </View>
+                            <View style={styles.sharedContainer}>
+                                <Text>Share with therapist:</Text>
+                                <Switch
+                                    value={shared}
+                                    onValueChange={setShared}
+                                />
+                            </View>
 
-                        <View style={styles.modalButtons}>
-                            <TouchableOpacity
-                                style={styles.saveButton}
-                                onPress={handleAddEntry}
-                            >
-                                <Text style={styles.saveText}>Save</Text>
-                            </TouchableOpacity>
+                            <View style={styles.modalButtons}>
+                                <TouchableOpacity
+                                    style={styles.saveButton}
+                                    onPress={handleAddEntry}
+                                >
+                                    <Text style={styles.saveText}>Save</Text>
+                                </TouchableOpacity>
 
-                            <TouchableOpacity
-                                style={styles.cancelButton}
-                                onPress={() => setModalVisible(false)}
-                            >
-                                <Text>Cancel</Text>
-                            </TouchableOpacity>
-                        </View>
+                                <TouchableOpacity
+                                    style={styles.cancelButton}
+                                    onPress={() => setModalVisible(false)}
+                                >
+                                    <Text>Cancel</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </ScrollView>
                     </View>
-                </View>
+                </KeyboardAvoidingView>
             </Modal>
         </View>
     );
 }
 
+/* ------------------------------------------------------------------ */
+/* Styles                                                             */
+/* ------------------------------------------------------------------ */
+
 const styles = StyleSheet.create({
     screen: { flex: 1, padding: 16, backgroundColor: "#F9FAFB" },
+
     newEntryButton: {
         backgroundColor: "#7C3AED",
         padding: 14,
@@ -333,6 +369,7 @@ const styles = StyleSheet.create({
         marginBottom: 20,
     },
     newEntryText: { color: "white", fontWeight: "600" },
+
     card: {
         backgroundColor: "white",
         padding: 16,
@@ -352,21 +389,35 @@ const styles = StyleSheet.create({
     },
     modalContent: {
         backgroundColor: "white",
-        padding: 20,
         borderRadius: 20,
         width: "90%",
+        maxHeight: "90%",
     },
+    modalScroll: {
+        padding: 20,
+        paddingBottom: 30,
+    },
+
     modalTitle: { fontSize: 18, fontWeight: "700" },
     joeText: { marginVertical: 10, color: "#374151" },
+
     modalInput: {
         borderWidth: 1,
         borderColor: "#E5E7EB",
         borderRadius: 12,
         padding: 12,
         marginBottom: 12,
+        minHeight: 80,
     },
-    tagsTitle: { fontWeight: "700", marginBottom: 8 },
-    tagsContainer: { flexDirection: "row", flexWrap: "wrap", marginBottom: 12 },
+
+    tagsCategory: { fontWeight: "700", marginVertical: 6 },
+
+    tagsContainer: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        marginBottom: 12,
+    },
+
     tagButton: {
         padding: 10,
         borderRadius: 12,
@@ -375,14 +426,22 @@ const styles = StyleSheet.create({
         marginRight: 8,
         marginBottom: 8,
     },
-    tagSelected: { backgroundColor: "#7C3AED", borderColor: "#7C3AED" },
+
+    tagSelected: {
+        backgroundColor: "#7C3AED",
+        borderColor: "#7C3AED",
+    },
+
     tagText: { fontWeight: "600", color: "#111827" },
+
     sharedContainer: {
         flexDirection: "row",
         justifyContent: "space-between",
         marginBottom: 16,
     },
+
     modalButtons: { flexDirection: "row" },
+
     saveButton: {
         flex: 1,
         backgroundColor: "#7C3AED",
@@ -391,7 +450,9 @@ const styles = StyleSheet.create({
         alignItems: "center",
         marginRight: 4,
     },
+
     saveText: { color: "white", fontWeight: "600" },
+
     cancelButton: {
         flex: 1,
         backgroundColor: "#E5E7EB",

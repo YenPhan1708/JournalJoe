@@ -32,7 +32,7 @@ export default function CoachCard() {
                     .slice(0, 5); // take last 5 entries
 
                 // Call Joe API
-                const res = await fetch("http://172.20.10.2:3000/api/joe-message", {
+                const res = await fetch("http://192.168.1.72:3000/api/joe-message", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ previousEntries: recentEntries }),
