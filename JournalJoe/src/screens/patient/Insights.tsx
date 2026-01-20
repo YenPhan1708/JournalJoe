@@ -95,7 +95,7 @@ export default function Insights() {
 
         const fetchJoeTips = async () => {
             try {
-                const res = await fetch("http://172.20.10.2:3000/api/joe-tips", {
+                const res = await fetch("http://172.16.29.99:3000/api/joe-tips", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ journals }), // send full journal objects

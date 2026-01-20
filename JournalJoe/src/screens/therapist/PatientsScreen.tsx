@@ -163,7 +163,7 @@ export default function PatientsScreen() {
 
             try {
                 const res = await fetch(
-                    "http://172.20.10.2:3000/api/mood-trend",
+                    "http://172.16.29.99:3000/api/mood-trend",
                     {
                         method: "POST",
                         headers: {

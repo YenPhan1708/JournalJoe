@@ -157,7 +157,7 @@ export default function PatientDetailScreen() {
         toAnalyze.forEach(async j => {
             try {
                 const res = await fetch(
-                    "http://172.20.10.2:3000/api/journal-analysis",
+                    "http://172.16.29.99:3000/api/journal-analysis",
                     {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
