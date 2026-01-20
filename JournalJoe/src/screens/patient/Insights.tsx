@@ -274,6 +274,29 @@ export default function Insights() {
             <MoodChart data={moodData} />
 
             <View style={styles.card}>
+                <Text style={styles.cardTitle}>How your mood score works 🙂</Text>
+
+                <Text style={styles.moodExplain}>
+                    Each journal entry is gently analyzed to understand the emotional tone of
+                    what you wrote. Scores range from 1 (very low) to 5 (very positive).
+                    This isn’t about judging your feelings — it’s about noticing patterns over time.
+                </Text>
+
+                <View style={styles.moodScale}>
+                    <Text style={styles.moodItem}>😞 <Text style={styles.bold}>1</Text> — Very low / overwhelmed</Text>
+                    <Text style={styles.moodItem}>😕 <Text style={styles.bold}>2</Text> — Low / struggling</Text>
+                    <Text style={styles.moodItem}>😐 <Text style={styles.bold}>3</Text> — Neutral / mixed</Text>
+                    <Text style={styles.moodItem}>🙂 <Text style={styles.bold}>4</Text> — Positive / coping well</Text>
+                    <Text style={styles.moodItem}>😊 <Text style={styles.bold}>5</Text> — Very positive / thriving</Text>
+                </View>
+
+                <Text style={styles.moodNote}>
+                    Focus on trends, not individual numbers. Emotional ups and downs are normal.
+                </Text>
+            </View>
+
+
+            <View style={styles.card}>
                 <Text style={styles.cardTitle}>What you’ve been processing 🧠</Text>
                 <View style={styles.tagsWrap}>
                     {Object.entries(tagCount).map(([tag, count]) => (
@@ -397,5 +420,33 @@ const styles = StyleSheet.create({
         marginBottom: 6,
         color: COLORS.text,
     },
+
+    moodExplain: {
+        fontSize: 13,
+        color: COLORS.text,
+        marginBottom: 10,
+        lineHeight: 18,
+    },
+
+    moodScale: {
+        marginBottom: 8,
+    },
+
+    moodItem: {
+        fontSize: 13,
+        marginBottom: 4,
+        color: COLORS.text,
+    },
+
+    bold: {
+        fontWeight: "700",
+    },
+
+    moodNote: {
+        fontSize: 12,
+        color: COLORS.textMuted,
+        marginTop: 6,
+    },
+
 });
 
