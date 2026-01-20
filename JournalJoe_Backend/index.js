@@ -57,45 +57,7 @@ app.get("/test", (req, res) => {
     res.json({ ok: true });
 });
 
-// ================= JOE-TIPS =================
-app.post("/api/joe-tips", async (req, res) => {
-    try {
-        const { journals } = req.body;
-        if (!journals || journals.length === 0) {
-            return res.json({ tipsText: "Not enough data yet." });
-        }
 
-        const prompt = `
-You are Joe, a supportive journaling assistant. Provide short, structured self-help tips based on these journal entries.
-Format as follows with emojis and bullet points:
-
-🌿 
-For Anxiety Moments:
-•
-...
-🧘
-For Stress Management:
-•
-...
-
-Journal entries:
-${journals.join("\n---\n")}
-
-Provide only tips, no analysis, short bullet points.
-`;
-
-        const completion = await openai.chat.completions.create({
-            model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-            messages: [{ role: "user", content: prompt }],
-            temperature: 0.4,
-        });
-
-        res.json({ tipsText: completion.choices[0].message.content.trim() });
-    } catch (err) {
-        console.error("Error in /api/joe-tips:", err);
-        res.status(500).json({ error: "Joe tips failed" });
-    }
-});
 
 // ================= JOE-MESSAGE =================
 app.post("/api/joe-message", async (req, res) => {

@@ -14,6 +14,10 @@ import StatCard from "../../components/StatCard";
 import MoodChart from "../../components/MoodChart";
 import { COLORS } from "../../theme/colors";
 
+/* ------------------------------------------------------------------ */
+/* Types                                                              */
+/* ------------------------------------------------------------------ */
+
 interface JournalEntry {
     id: string;
     date: string;
@@ -26,6 +30,98 @@ interface JournalEntry {
 interface AnimatedTagProps {
     label: string;
 }
+
+/* ------------------------------------------------------------------ */
+/* Static Tips (FROM PDF)                                              */
+/* ------------------------------------------------------------------ */
+
+const STATIC_TIPS = [
+    {
+        title: "📔 Using Journaling Effectively",
+        items: [
+            "Write honestly without worrying about grammar or structure.",
+            "Short, consistent entries are more helpful than rare long ones.",
+            "Use tags to notice emotional patterns over time.",
+            "Your journal is a judgment-free space.",
+            "Focus on expressing emotions, not solving them immediately.",
+        ],
+    },
+    {
+        title: "🆘 When to Seek Human Support",
+        items: [
+            "If distress feels overwhelming or unsafe.",
+            "When thoughts of self-harm appear.",
+            "If emotional patterns feel stuck or repetitive.",
+            "When you want deeper discussion with a therapist.",
+        ],
+    },
+    {
+        title: "🧠 Emotional Awareness",
+        items: [
+            "Name emotions precisely (e.g. frustrated vs overwhelmed).",
+            "Notice physical sensations connected to emotions.",
+            "Allow emotions without trying to fix them immediately.",
+            "Track emotional changes across days or weeks.",
+        ],
+    },
+    {
+        title: "⚡ Stress & Overwhelm",
+        items: [
+            "Break large tasks into smaller steps.",
+            "Schedule short recovery breaks.",
+            "Reduce cognitive load by writing things down.",
+            "Ask for support when stress persists.",
+        ],
+    },
+    {
+        title: "🌿 Anxiety & Grounding",
+        items: [
+            "Use box breathing (4–4–4–4).",
+            "Try the 5–4–3–2–1 grounding technique.",
+            "Progressively tense and relax muscles.",
+            "Anchor attention using a physical object.",
+        ],
+    },
+    {
+        title: "🧱 Boundaries & Expectations",
+        items: [
+            "Recognize what drains vs energizes you.",
+            "Communicate boundaries clearly and calmly.",
+            "Protect rest time without guilt.",
+            "Boundaries support long-term mental health.",
+        ],
+    },
+    {
+        title: "🔥 Motivation & Burnout",
+        items: [
+            "Watch for exhaustion lasting more than two weeks.",
+            "Lower expectations on low-energy days.",
+            "Focus on progress, not productivity.",
+            "Rest is a requirement, not a reward.",
+        ],
+    },
+    {
+        title: "💜 Self-Compassion",
+        items: [
+            "Speak to yourself like a close friend.",
+            "Replace self-criticism with curiosity.",
+            "Acknowledge effort, not just outcomes.",
+            "Growth comes from kindness, not pressure.",
+        ],
+    },
+    {
+        title: "🌅 Balance & Recovery",
+        items: [
+            "Create simple morning and evening routines.",
+            "Prioritize sleep, hydration, and movement.",
+            "Schedule one restorative activity daily.",
+        ],
+    },
+];
+
+/* ------------------------------------------------------------------ */
+/* Animated Tag                                                        */
+/* ------------------------------------------------------------------ */
 
 const AnimatedTag: React.FC<AnimatedTagProps> = ({ label }) => {
     const scale = useRef(new Animated.Value(1)).current;
@@ -54,33 +150,62 @@ const AnimatedTag: React.FC<AnimatedTagProps> = ({ label }) => {
     );
 };
 
+/* ------------------------------------------------------------------ */
+/* Tip Accordion                                                       */
+/* ------------------------------------------------------------------ */
+
+const TipSection = ({ title, items }: { title: string; items: string[] }) => {
+    const [open, setOpen] = useState(false);
+
+    return (
+        <View style={styles.tipSection}>
+            <Pressable onPress={() => setOpen(!open)} style={styles.tipHeader}>
+                <Text style={styles.tipHeaderText}>{title}</Text>
+                <Text style={styles.tipChevron}>{open ? "−" : "+"}</Text>
+            </Pressable>
+
+            {open && (
+                <View style={styles.tipContent}>
+                    {items.map((tip, i) => (
+                        <Text key={i} style={styles.tipItem}>
+                            • {tip}
+                        </Text>
+                    ))}
+                </View>
+            )}
+        </View>
+    );
+};
+
+/* ------------------------------------------------------------------ */
+/* Screen                                                             */
+/* ------------------------------------------------------------------ */
+
 export default function Insights() {
     const [journals, setJournals] = useState<JournalEntry[]>([]);
     const [loading, setLoading] = useState(true);
-    const [joeTipsText, setJoeTipsText] = useState<string>("");
 
-    // Fetch journals from Firestore
     useEffect(() => {
         const fetchJournals = async () => {
             try {
                 const q = query(collection(db, "journals"), orderBy("createdAt", "desc"));
                 const snapshot = await getDocs(q);
 
-                const fetchedJournals: JournalEntry[] = snapshot.docs.map(doc => {
-                    const data = doc.data();
+                const fetched: JournalEntry[] = snapshot.docs.map(doc => {
+                    const d = doc.data();
                     return {
                         id: doc.id,
-                        date: data.createdAt?.toDate().toISOString().split("T")[0] || "",
-                        moodScore: data.moodScore,
-                        tags: Array.isArray(data.tags) ? data.tags : [data.tags],
-                        text: data.text || "",
-                        shared: data.shared || false,
+                        date: d.createdAt?.toDate().toISOString().split("T")[0] || "",
+                        moodScore: d.moodScore,
+                        tags: Array.isArray(d.tags) ? d.tags : [d.tags],
+                        text: d.text || "",
+                        shared: d.shared || false,
                     };
                 });
 
-                setJournals(fetchedJournals);
+                setJournals(fetched);
             } catch (err) {
-                console.error("Error fetching journals:", err);
+                console.error("Fetch journals error:", err);
             } finally {
                 setLoading(false);
             }
@@ -89,32 +214,10 @@ export default function Insights() {
         fetchJournals();
     }, []);
 
-    // Fetch Joe Tips based on raw journal entries
-    useEffect(() => {
-        if (journals.length === 0) return;
-
-        const fetchJoeTips = async () => {
-            try {
-                const res = await fetch("http://192.168.1.72:3000/api/joe-tips", {
-                    method: "POST",
-                    headers: { "Content-FType": "application/json" },
-                    body: JSON.stringify({ journals }), // send full journal objects
-                });
-
-                const data = await res.json();
-                setJoeTipsText(data.tipsText || "");
-            } catch (err) {
-                console.error("Failed to fetch Joe tips:", err);
-                setJoeTipsText("");
-            }
-        };
-
-        fetchJoeTips();
-    }, [journals]);
-
     if (loading) return <Text style={{ padding: 16 }}>Loading...</Text>;
 
-    // Calculate mood chart data
+    /* ---------------- Mood Chart ---------------- */
+
     const moodByDate: Record<string, { total: number; count: number }> = {};
     journals.forEach(j => {
         if (!j.moodScore) return;
@@ -128,30 +231,11 @@ export default function Insights() {
         .map(([date, { total, count }]) => ({
             label: new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
             entries: total / count,
-        }));
+        }))
+        .slice(-30);
 
-    const displayedMoodData = moodData.slice(-30);
+    /* ---------------- Stats ---------------- */
 
-    // Extract Joe tips
-    const lines = joeTipsText.split("\n").map(l => l.trim());
-    const extractTips = (sectionTitle: string) => {
-        const startIndex = lines.findIndex(l => l.includes(sectionTitle));
-        if (startIndex === -1) return [];
-
-        const tips: string[] = [];
-        for (let i = startIndex + 1; i < lines.length; i++) {
-            const line = lines[i];
-            if (line.includes("For ") && line.includes(":")) break;
-            if (line.startsWith("• ") && line !== "• —") tips.push(line.slice(2));
-            if (tips.length === 4) break;
-        }
-        return tips;
-    };
-
-    const anxietyTips = extractTips("For Anxiety Moments");
-    const stressTips = extractTips("For Stress Management");
-
-    // Count tags
     const tagCount = journals
         .flatMap(j => j.tags)
         .reduce<Record<string, number>>((acc, tag) => {
@@ -159,7 +243,6 @@ export default function Insights() {
             return acc;
         }, {});
 
-    // Correct calculation for Last 7 Days and Shared
     const today = new Date();
     const last7DaysCount = journals.filter(j => {
         const entryDate = new Date(j.date);
@@ -176,7 +259,9 @@ export default function Insights() {
             showsVerticalScrollIndicator={false}
         >
             <Text style={styles.header}>Your Insights 📊</Text>
-            <Text style={styles.subHeader}>Here’s what I’ve noticed about your journey</Text>
+            <Text style={styles.subHeader}>
+                Patterns, progress, and gentle guidance based on your journaling
+            </Text>
 
             <CoachCard />
 
@@ -186,7 +271,7 @@ export default function Insights() {
                 <StatCard icon="share-social-outline" value={sharedCount} label="Shared" />
             </View>
 
-            <MoodChart data={displayedMoodData} />
+            <MoodChart data={moodData} />
 
             <View style={styles.card}>
                 <Text style={styles.cardTitle}>What you’ve been processing 🧠</Text>
@@ -198,36 +283,41 @@ export default function Insights() {
             </View>
 
             <View style={styles.card}>
-                <Text style={styles.cardTitle}>Joe’s Tips for You 💜</Text>
-                {!joeTipsText ? (
-                    <Text style={styles.tipText}>Loading tips...</Text>
-                ) : (
-                    <>
-                        <View style={styles.tipBox}>
-                            <Text style={styles.tipTitle}>🌿 For Anxiety Moments:</Text>
-                            {anxietyTips.map((tip, i) => (
-                                <Text key={i} style={styles.tipText}>• {tip}</Text>
-                            ))}
-                        </View>
+                <Text style={styles.cardTitle}>Joe’s Guidance 💜</Text>
+                <Text style={styles.cardSub}>
+                    Tap a section to expand — take what resonates, leave the rest.
+                </Text>
 
-                        <View style={styles.tipBox}>
-                            <Text style={styles.tipTitle}>🧘 For Stress Management:</Text>
-                            {stressTips.map((tip, i) => (
-                                <Text key={i} style={styles.tipText}>• {tip}</Text>
-                            ))}
-                        </View>
-                    </>
-                )}
+                {STATIC_TIPS.map(section => (
+                    <TipSection
+                        key={section.title}
+                        title={section.title}
+                        items={section.items}
+                    />
+                ))}
             </View>
         </ScrollView>
     );
 }
 
+/* ------------------------------------------------------------------ */
+/* Styles                                                             */
+/* ------------------------------------------------------------------ */
+
 const styles = StyleSheet.create({
     container: { padding: 16 },
+
     header: { fontSize: 22, fontWeight: "700" },
-    subHeader: { color: COLORS.textMuted, marginBottom: 16 },
-    stats: { flexDirection: "row", gap: 8, marginBottom: 16 },
+    subHeader: {
+        color: COLORS.textMuted,
+        marginBottom: 16,
+    },
+
+    stats: {
+        flexDirection: "row",
+        gap: 8,
+        marginBottom: 16,
+    },
 
     card: {
         backgroundColor: COLORS.card,
@@ -237,32 +327,75 @@ const styles = StyleSheet.create({
         borderColor: COLORS.border,
         marginBottom: 16,
     },
-    cardTitle: { fontWeight: "700", marginBottom: 10 },
+
+    cardTitle: {
+        fontWeight: "700",
+        marginBottom: 6,
+    },
+
+    cardSub: {
+        fontSize: 12,
+        color: COLORS.textMuted,
+        marginBottom: 12,
+    },
 
     tagsWrap: {
         flexDirection: "row",
         flexWrap: "wrap",
         gap: 8,
     },
+
     tag: {
         backgroundColor: COLORS.primarySoft,
         borderRadius: 20,
         paddingHorizontal: 12,
         paddingVertical: 6,
     },
+
     tagText: {
         fontSize: 12,
         fontWeight: "500",
         color: COLORS.primary,
     },
 
-    tipBox: {
+    /* ---------- Tips Accordion ---------- */
+
+    tipSection: {
         borderRadius: 14,
         borderWidth: 1,
         borderColor: COLORS.border,
-        padding: 12,
-        marginBottom: 12,
+        marginBottom: 10,
+        overflow: "hidden",
     },
-    tipTitle: { fontWeight: "600", marginBottom: 6 },
-    tipText: { fontSize: 13, marginLeft: 4, marginBottom: 4 },
+
+    tipHeader: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        padding: 12,
+        backgroundColor: COLORS.primarySoft,
+    },
+
+    tipHeaderText: {
+        fontWeight: "600",
+        color: COLORS.primary,
+        fontSize: 13,
+    },
+
+    tipChevron: {
+        fontSize: 18,
+        fontWeight: "600",
+        color: COLORS.primary,
+    },
+
+    tipContent: {
+        padding: 12,
+        backgroundColor: COLORS.card,
+    },
+
+    tipItem: {
+        fontSize: 13,
+        marginBottom: 6,
+        color: COLORS.text,
+    },
 });
+
