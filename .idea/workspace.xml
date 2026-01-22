@@ -5,7 +5,12 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="77cf2025-8988-4086-8bbe-662cc6045c2d" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/JournalJoe/src/screens/patient/Insights.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/JournalJoe/src/screens/patient/Insights.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/JournalJoe/src/components/CoachCard.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/JournalJoe/src/components/CoachCard.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/JournalJoe/src/components/MoodChart.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/JournalJoe/src/components/MoodChart.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/JournalJoe/src/screens/patient/Journal.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/JournalJoe/src/screens/patient/Journal.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/JournalJoe/src/screens/therapist/PatientDetailScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/JournalJoe/src/screens/therapist/PatientDetailScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/JournalJoe/src/screens/therapist/PatientsScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/JournalJoe/src/screens/therapist/PatientsScreen.tsx" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -141,7 +146,7 @@
       <updated>1766004503362</updated>
       <workItem from="1766004504857" duration="43678000" />
       <workItem from="1768914394712" duration="356000" />
-      <workItem from="1768914765000" duration="5880000" />
+      <workItem from="1768914765000" duration="7843000" />
     </task>
     <servers />
   </component>
