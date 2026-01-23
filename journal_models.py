@@ -125,7 +125,7 @@ def aggregate_emotions(
     }
 
 
-# ---------------- Risk assessment (your notebook logic) ----------------
+# ---------------- Risk assessment ----------------
 
 SUICIDAL_LABEL_ID = ["1"]
 DEPRESSION_LABEL_ID = ["2"]
